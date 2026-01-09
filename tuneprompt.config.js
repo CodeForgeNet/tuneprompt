@@ -15,7 +15,7 @@ module.exports = {
     openrouter: {
       apiKey: process.env.OPENROUTER_API_KEY,
       model: 'mistralai/mistral-7b-instruct:free',
-      maxTokens: 400,
+      maxTokens: 450,
       temperature: 0.7
     }
   },

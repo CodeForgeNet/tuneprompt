@@ -12,7 +12,6 @@ export class TestRunner {
     private config: TunePromptConfig;
     private providers: Map<string, BaseProvider> = new Map();
 
-
     constructor(config: TunePromptConfig) {
         this.config = config;
         this.initializeProviders();
@@ -22,8 +21,6 @@ export class TestRunner {
         if (this.config.providers.openai) {
             const provider = new OpenAIProvider(this.config.providers.openai);
             this.providers.set('openai', provider);
-
-
         }
 
         if (this.config.providers.anthropic) {
@@ -35,8 +32,6 @@ export class TestRunner {
         if (this.config.providers.openrouter) {
             const provider = new OpenRouterProvider(this.config.providers.openrouter);
             this.providers.set('openrouter', provider);
-
-
         }
     }
 
@@ -69,17 +64,23 @@ export class TestRunner {
         const testId = uuidv4();
         const startTime = Date.now();
 
-        // Define fallback order
+        // Define fallback order: Primary -> Fallbacks
         const fallbackChain = ['openai', 'anthropic', 'openrouter'];
 
         // Determine starting provider
         const initialProvider = testCase.config?.provider || 'openai';
 
         // Build the sequence of providers to try
-        const providersToTry = [
-            initialProvider,
-            ...fallbackChain.filter(p => p !== initialProvider)
-        ];
+        let providersToTry: string[];
+        if (testCase.config?.provider) {
+            // If provider is explicitly set, only try that one
+            providersToTry = [testCase.config.provider];
+        } else {
+            providersToTry = [
+                initialProvider,
+                ...fallbackChain.filter(p => p !== initialProvider)
+            ];
+        }
 
         let lastError: any;
         let errors: string[] = [];
@@ -113,14 +114,13 @@ export class TestRunner {
                     const embeddingCapable = ['openai', 'openrouter'];
 
                     // Order: Current provider (if capable) -> OpenAI -> OpenRouter -> others
-                    // This ensures we try to use the generating provider first (consistency), then fallbacks
                     const scoringProvidersToTry = [
                         ...(embeddingCapable.includes(providerName) ? [providerName] : []),
                         ...embeddingCapable.filter(p => p !== providerName)
                     ].filter(p => this.providers.has(p));
 
                     if (scoringProvidersToTry.length === 0) {
-                        throw new Error('No embedding-capable providers (OpenAI, OpenRouter) available for semantic scoring');
+                        throw new Error('No embedding-capable providers available for semantic scoring');
                     }
 
                     for (const scoreProviderName of scoringProvidersToTry) {
@@ -133,11 +133,9 @@ export class TestRunner {
                                 String(testCase.expect),
                                 response.content
                             );
-                            // If successful, break
                             break;
                         } catch (err) {
                             lastScoringError = err;
-                            // verify if this was an auth error? For now just try next.
                             continue;
                         }
                     }
@@ -172,9 +170,6 @@ export class TestRunner {
             } catch (error: any) {
                 lastError = error;
                 errors.push(`${providerName.toUpperCase()}: ${error.message}`);
-
-                // If it's a scoring error and we have a response, we might want to return a fail instead of falling back
-                // For now, if completion worked but scoring failed, we fallback to try another complete-score cycle
                 continue;
             }
         }

@@ -61,7 +61,7 @@ export function getDefaultConfigTemplate(): string {
     openrouter: {
       apiKey: process.env.OPENROUTER_API_KEY,
       model: 'mistralai/mistral-7b-instruct:free',
-      maxTokens: 450,
+      maxTokens: 400,
       temperature: 0.7
     }
   },
