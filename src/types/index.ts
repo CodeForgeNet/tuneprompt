@@ -24,6 +24,7 @@ export interface TestResult {
         timestamp: Date;
         tokens?: number;
         cost?: number;
+        provider?: string;
     };
 }
 

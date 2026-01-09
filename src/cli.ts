@@ -6,6 +6,7 @@ import * as dotenv from 'dotenv';
 import { initCommand } from './commands/init';
 import { runCommand } from './commands/run';
 import { historyCommand } from './commands/history';
+import { fixCommand } from './commands/fix';
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,13 @@ program
         } else {
             await runCommand(options);
         }
+    });
+
+program
+    .command('fix')
+    .description('Auto-fix failing prompts using AI')
+    .action(async () => {
+        await fixCommand();
     });
 
 program

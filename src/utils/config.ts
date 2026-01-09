@@ -57,6 +57,12 @@ export function getDefaultConfigTemplate(): string {
       model: 'claude-sonnet-4-20250514',
       maxTokens: 1000,
       temperature: 0.7
+    },
+    openrouter: {
+      apiKey: process.env.OPENROUTER_API_KEY,
+      model: 'mistralai/mistral-7b-instruct:free',
+      maxTokens: 450,
+      temperature: 0.7
     }
   },
   

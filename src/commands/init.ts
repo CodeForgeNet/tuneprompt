@@ -59,7 +59,7 @@ export async function initCommand() {
 
     if (answers.createEnv) {
         const envPath = path.join(process.cwd(), '.env');
-        const envContent = `OPENAI_API_KEY=your_key_here\nANTHROPIC_API_KEY=your_key_here\n`;
+        const envContent = `OPENAI_API_KEY=your_key_here\nANTHROPIC_API_KEY=your_key_here\nOPENROUTER_API_KEY=your_key_here\n`;
         fs.writeFileSync(envPath, envContent);
         console.log(chalk.green('✓ Created .env'));
     }
