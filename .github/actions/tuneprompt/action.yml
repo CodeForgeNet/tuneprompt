@@ -1,0 +1,45 @@
+name: 'TunePrompt Test'
+description: 'Run TunePrompt tests in CI/CD'
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  openai-api-key:
+    description: 'OpenAI API Key'
+    required: false
+  anthropic-api-key:
+    description: 'Anthropic API Key'
+    required: false
+  config-path:
+    description: 'Path to tuneprompt config'
+    required: false
+    default: './tuneprompt.config.js'
+  fail-on-error:
+    description: 'Fail the workflow if tests fail'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Install TunePrompt
+      shell: bash
+      run: npm install -g tuneprompt
+    
+    - name: Run Tests
+      shell: bash
+      env:
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        if [ "${{ inputs.fail-on-error }}" == "true" ]; then
+          tuneprompt run --ci --config ${{ inputs.config-path }}
+        else
+          tuneprompt run --config ${{ inputs.config-path }} || true
+        fi
