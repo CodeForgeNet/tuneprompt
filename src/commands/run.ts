@@ -1,5 +1,8 @@
-import ora from 'ora';
+import { Command } from 'commander';
+import { CloudService, RunData } from '../services/cloud.service';
 import chalk from 'chalk';
+import { execSync } from 'child_process';
+import ora from 'ora';
 import { loadConfig } from '../utils/config';
 import { TestLoader } from '../engine/loader';
 import { TestRunner } from '../engine/runner';
@@ -12,6 +15,7 @@ export interface RunOptions {
     config?: string;
     watch?: boolean;
     ci?: boolean;
+    cloud?: boolean;
 }
 
 // At the end of your test run reporter
@@ -44,7 +48,12 @@ function displayRunSummary(results: TestResult[]): void {
     }
 }
 
-export async function runCommand(options: RunOptions) {
+export const runCommand = new Command('run')
+  .description('Run prompt tests')
+  .option('--cloud', 'Upload results to Tuneprompt Cloud')
+  .option('--ci', 'Run in CI mode (auto-enables --cloud)')
+  .action(async (options) => {
+    const startTime = Date.now();
     const spinner = ora('Loading configuration...').start();
 
     try {
@@ -79,12 +88,67 @@ export async function runCommand(options: RunOptions) {
         const reporter = new TestReporter();
         reporter.printResults(results, config.outputFormat);
 
+        // Calculate results for cloud upload
+        const testResults = results.results.map((result: TestResult) => {
+          // Map from internal TestResult to cloud service TestResult
+          const mappedResult: import('../services/cloud.service').TestResult = {
+            test_name: result.testCase.description,
+            test_description: result.testCase.description,
+            prompt: typeof result.testCase.prompt === 'string'
+              ? result.testCase.prompt
+              : JSON.stringify(result.testCase.prompt),
+            input_data: result.testCase.variables,
+            expected_output: result.expectedOutput,
+            actual_output: result.actualOutput,
+            score: result.score,
+            method: result.testCase.config?.method || 'exact',
+            status: result.status,
+            model: result.metadata.provider || '',
+            tokens_used: result.metadata.tokens,
+            latency_ms: result.metadata.duration,
+            cost_usd: result.metadata.cost,
+            error_message: result.error,
+            error_type: undefined, // No error type in current TestResult interface
+          };
+          return mappedResult;
+        });
+
+        // Calculate total cost from all test results
+        const totalCost = results.results.reduce((sum, result) => {
+          return sum + (result.metadata.cost || 0);
+        }, 0);
+
+        const resultsSummary = {
+          totalTests: results.results.length,
+          passedTests: results.passed,
+          failedTests: results.failed,
+          durationMs: Date.now() - startTime,
+          totalCost: totalCost || 0.05, // fallback value
+          tests: testResults,
+        };
+
+        // Print results to console (existing logic)
+        console.log(chalk.green(`\n✅ ${resultsSummary.passedTests} passed`));
+        console.log(chalk.red(`❌ ${resultsSummary.failedTests} failed\n`));
+
         // Show upsell hint if tests failed
         displayRunSummary(results.results);
 
-        // Exit with error code in CI mode
-        if (options.ci && results.failed > 0) {
-            process.exit(1);
+        // NEW: Cloud upload logic
+        const isCI = options.ci ||
+                     process.env.CI === 'true' ||
+                     !!process.env.GITHUB_ACTIONS ||
+                     !!process.env.GITLAB_CI;
+
+        const shouldUpload = options.cloud || isCI;
+
+        if (shouldUpload) {
+          await uploadToCloud(resultsSummary, options);
+        }
+
+        // Exit with error code if tests failed
+        if (resultsSummary.failedTests > 0) {
+          process.exit(1);
         }
 
     } catch (error: any) {
@@ -92,57 +156,85 @@ export async function runCommand(options: RunOptions) {
         console.error(chalk.red(error.message));
         process.exit(1);
     }
-}
+});
 
+async function uploadToCloud(results: {
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  durationMs: number;
+  totalCost: number;
+  tests: import('../services/cloud.service').TestResult[];
+}, options: any) {
+  const cloudService = new CloudService();
+  await cloudService.init();
 
+  const isAuth = await cloudService.isAuthenticated();
 
-async function displayResults(results: TestResult[]) {
-    const failures = results.filter(r => r.status === 'fail');
-    const passes = results.filter(r => r.status === 'pass');
+  if (!isAuth) {
+    console.log(chalk.yellow('\n⚠️  Not authenticated with Cloud.'));
+    console.log(chalk.gray('Results saved locally. Run `tuneprompt activate` to enable cloud sync\n'));
+    return;
+  }
 
-    console.log('\n' + chalk.bold('Test Results:'));
-    console.log(chalk.green(`✅ ${passes.length} passed`));
-    console.log(chalk.red(`❌ ${failures.length} failed`));
-
-    // Show failures
-    if (failures.length > 0) {
-        console.log('\n' + chalk.bold.red('Failed Tests:\n'));
-
-        failures.forEach((test, index) => {
-            console.log(chalk.red(`${index + 1}. ${test.testCase.description}`));
-            console.log(chalk.gray(`   Expected: ${test.expectedOutput.substring(0, 80)}...`));
-            console.log(chalk.gray(`   Got: ${test.actualOutput.substring(0, 80)}...`));
-            console.log(chalk.gray(`   Score: ${test.score.toFixed(2)} (threshold: ${test.testCase.config?.threshold || 0.8})\n`));
-        });
-
-        // ⭐ UPSELL SECTION
-        showFixUpsell(failures.length);
-    }
-}
-
-function showFixUpsell(failureCount: number) {
-    const license = getLicenseInfo();
-
-    if (license) {
-        // User has premium - encourage them to use fix
-        console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
-        console.log(chalk.bold.cyan(`💡 ${failureCount} test${failureCount > 1 ? 's' : ''} failed`));
-        console.log('\n' + chalk.gray('Let AI fix these prompts automatically:'));
-        console.log('  ' + chalk.bold('tuneprompt fix'));
-        console.log(chalk.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+  // Get or create project
+  let projectId: string;
+  try {
+    const projects = await cloudService.getProjects();
+    if (projects.length === 0) {
+      const project = await cloudService.createProject('Default Project');
+      projectId = project.id;
     } else {
-        // User is on free tier - show upgrade prompt
-        console.log(chalk.yellow('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
-        console.log(chalk.bold(`💡 ${failureCount} test${failureCount > 1 ? 's' : ''} failed`));
-        console.log('\n' + chalk.gray('Stop debugging manually. Let AI fix these prompts:'));
-        console.log('  ' + chalk.bold('tuneprompt fix') + chalk.red(' (Premium)'));
-        console.log('\n' + chalk.bold('What you get:'));
-        console.log(chalk.gray('  ✅ AI analyzes why each test failed'));
-        console.log(chalk.gray('  ✅ Generates optimized prompt variations'));
-        console.log(chalk.gray('  ✅ Shadow tests fixes before applying'));
-        console.log(chalk.gray('  ✅ Interactive diff viewer\n'));
-        console.log(chalk.bold('Get started:'));
-        console.log(chalk.gray(`  ${chalk.blue.underline('http://localhost:8080')}`));
-        console.log(chalk.yellow('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+      projectId = projects[0].id; // Use first project
     }
+  } catch (error) {
+    console.log(chalk.yellow('⚠️  Failed to get project'));
+    return;
+  }
+
+  // Get Git context
+  let gitContext = {};
+  try {
+    gitContext = {
+      commit_hash: execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim(),
+      branch_name: execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim(),
+      commit_message: execSync('git log -1 --pretty=%B', { encoding: 'utf-8' }).trim(),
+    };
+  } catch {
+    // Not a git repo
+  }
+
+  // Detect CI provider
+  let ciProvider;
+  if (process.env.GITHUB_ACTIONS) ciProvider = 'github';
+  else if (process.env.GITLAB_CI) ciProvider = 'gitlab';
+  else if (process.env.JENKINS_HOME) ciProvider = 'jenkins';
+  else if (process.env.CIRCLECI) ciProvider = 'circleci';
+
+  // Prepare run data
+  const runData: import('../services/cloud.service').RunData = {
+    project_id: projectId,
+    environment: options.ci || process.env.CI ? 'ci' : 'local',
+    ci_provider: ciProvider,
+    total_tests: results.totalTests,
+    passed_tests: results.passedTests,
+    failed_tests: results.failedTests,
+    duration_ms: results.durationMs,
+    cost_usd: results.totalCost,
+    started_at: new Date(Date.now() - results.durationMs).toISOString(),
+    completed_at: new Date().toISOString(),
+    test_results: results.tests,
+    ...gitContext,
+  };
+
+  console.log(chalk.blue('\n☁️  Uploading results to Cloud...'));
+
+  const uploadResult = await cloudService.uploadRun(runData);
+
+  if (uploadResult.success) {
+    console.log(chalk.green('✅ Results uploaded successfully'));
+    console.log(chalk.gray(`View at: ${uploadResult.url}\n`));
+  } else {
+    console.log(chalk.yellow('⚠️  Failed to upload results:'), uploadResult.error);
+  }
 }
