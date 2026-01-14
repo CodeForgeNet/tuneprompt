@@ -215,21 +215,33 @@ export class PromptOptimizer {
     }
 
     /**
-     * Fallback prompt improvement (basic heuristics)
+     * Fallback prompt improvement - generates a clean rewritten prompt
      */
     private createFallbackPrompt(test: FailedTest): string {
-        let improved = test.prompt;
+        // Extract the core intent from the original prompt
+        // Remove any existing "You must provide..." prefixes to avoid duplication
+        let corePrompt = test.prompt
+            .replace(/You must provide a response that includes the following key information:\n[^\n]*\n\n/g, '')
+            .trim();
 
-        // Add output format specification if missing
-        if (test.errorType === 'json' && !improved.includes('JSON')) {
-            improved += '\n\nReturn your response as valid JSON only, with no additional text.';
+        // For JSON errors, create a structured prompt
+        if (test.errorType === 'json') {
+            return `${corePrompt}
+
+IMPORTANT: You must respond with valid JSON only. No explanations, no markdown, just the raw JSON object.`;
         }
 
-        // Add specificity for semantic failures
+        // For semantic errors, be more specific about expected output
         if (test.errorType === 'semantic') {
-            improved = `You must provide a response that includes the following key information:\n${test.expectedOutput}\n\n${improved}`;
+            return `${corePrompt}
+
+Your response must match this exactly: "${test.expectedOutput}"
+Do not add any extra text, greetings, or explanations. Output only what is requested.`;
         }
 
-        return improved;
+        // Default: add clarity
+        return `${corePrompt}
+
+Be concise and match the expected output format exactly.`;
     }
 }

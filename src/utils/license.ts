@@ -114,6 +114,7 @@ async function verifyWithBackend(subscriptionId: string): Promise<boolean> {
 
 /**
  * Main license check function
+ * Always verifies with backend to ensure real-time status
  */
 export async function checkLicense(): Promise<boolean> {
     const license = loadLicense();
@@ -127,22 +128,19 @@ export async function checkLicense(): Promise<boolean> {
         return true;
     }
 
-    // Check if verification is needed
-    if (needsVerification(license)) {
-        const isValid = await verifyWithBackend(license.subscriptionId);
+    // Always verify with backend to get real-time status
+    const isValid = await verifyWithBackend(license.subscriptionId);
 
-        if (isValid) {
-            // Update last verified timestamp
-            license.lastVerified = new Date().toISOString();
-            saveLicense(license);
-        } else {
-            // License is invalid (expired/cancelled)
-            deleteLicense();
-            return false;
-        }
+    if (isValid) {
+        // Update last verified timestamp
+        license.lastVerified = new Date().toISOString();
+        saveLicense(license);
+        return true;
+    } else {
+        // License is invalid (expired/cancelled)
+        deleteLicense();
+        return false;
     }
-
-    return true;
 }
 
 /**
@@ -192,7 +190,7 @@ export class LicenseManager {
     async hasFeature(feature: string): Promise<boolean> {
         const isValid = await checkLicense();
         if (!isValid) return false;
-        
+
         // Currently all features are available with any valid license
         // In the future, we can add plan-specific logic here
         return true;

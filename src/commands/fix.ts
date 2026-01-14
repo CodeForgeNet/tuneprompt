@@ -71,15 +71,15 @@ export async function fixCommand() {
 
                 // Ask if user wants to apply
                 const { action } = await inquirer.prompt([{
-                    type: 'list',
+                    type: 'rawlist',
                     name: 'action',
                     message: 'What would you like to do?',
                     choices: [
-                        { name: chalk.green('✅ Apply this fix (Updates your test file)'), value: 'apply' },
-                        { name: chalk.yellow('✏️  Edit before applying'), value: 'edit' },
-                        { name: chalk.red('❌ Skip this fix'), value: 'skip' }
+                        { name: 'Apply this fix (Updates your test file)', value: 'apply' },
+                        { name: 'Edit before applying', value: 'edit' },
+                        { name: 'Skip this fix', value: 'skip' }
                     ],
-                    default: 'apply'
+                    default: 0
                 }]);
 
                 if (action === 'apply') {
@@ -87,10 +87,11 @@ export async function fixCommand() {
                     console.log(`\n${chalk.bgGreen.black(' DONE ')} ${chalk.green('Prompt updated in:')} ${chalk.bold(test.id)}`);
                     console.log(chalk.gray('The next run will use this new prompt.\n'));
                 } else if (action === 'edit') {
+                    console.log(chalk.gray('\nOpening editor... (Save and close to apply)\n'));
                     const { edited } = await inquirer.prompt([{
-                        type: 'input', // Using input instead of editor for better compatibility
+                        type: 'editor',
                         name: 'edited',
-                        message: 'Edit the prompt:',
+                        message: 'Edit the prompt (save and close when done):',
                         default: result.optimizedPrompt
                     }]);
                     await applyFix(test, edited);

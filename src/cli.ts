@@ -71,10 +71,13 @@ program
 program
     .command('status')
     .description('Check license status')
-    .action(() => {
-        const license = getLicenseInfo();
+    .action(async () => {
+        const { checkLicense, getLicenseInfo } = await import('./utils/license');
 
-        if (!license) {
+        // First verify with backend (this will update DB and delete local license if cancelled)
+        const isValid = await checkLicense();
+
+        if (!isValid) {
             console.log(chalk.yellow('\n⚠️  No active license found\n'));
             console.log(chalk.gray('You are using the free tier.\n'));
             console.log(chalk.bold('Upgrade to Premium:'));
@@ -82,11 +85,15 @@ program
             return;
         }
 
-        console.log(chalk.green('\n✅ Premium License Active\n'));
-        console.log(chalk.gray(`Email: ${license.email}`));
-        console.log(chalk.gray(`Plan: ${license.plan}`));
-        console.log(chalk.gray(`Activated: ${new Date(license.activatedAt).toLocaleDateString()}`));
-        console.log(chalk.gray(`Last Verified: ${new Date(license.lastVerified).toLocaleDateString()}\n`));
+        // If license is valid, show info
+        const license = getLicenseInfo();
+        if (license) {
+            console.log(chalk.green('\n✅ Premium License Active\n'));
+            console.log(chalk.gray(`Email: ${license.email}`));
+            console.log(chalk.gray(`Plan: ${license.plan}`));
+            console.log(chalk.gray(`Activated: ${new Date(license.activatedAt).toLocaleDateString()}`));
+            console.log(chalk.gray(`Last Verified: ${new Date(license.lastVerified).toLocaleDateString()}\n`));
+        }
     });
 
 // Watch mode implementation
