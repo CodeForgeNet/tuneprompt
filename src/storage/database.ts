@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
+import { runMigrations } from '../db/migrate';
 import { TestRun, TestResult } from '../types';
 
 export class TestDatabase {
@@ -34,6 +35,11 @@ export class TestDatabase {
         id TEXT PRIMARY KEY,
         run_id TEXT NOT NULL,
         description TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        variables TEXT,
+        expect TEXT,
+        config TEXT,
+        file_path TEXT,
         status TEXT NOT NULL,
         score REAL NOT NULL,
         actual_output TEXT,
@@ -48,6 +54,13 @@ export class TestDatabase {
       CREATE INDEX IF NOT EXISTS idx_run_timestamp ON test_runs(timestamp);
       CREATE INDEX IF NOT EXISTS idx_result_run ON test_results(run_id);
     `);
+
+        // Run external migrations (Phase 2)
+        // Note: runMigrations is async but contains synchronous better-sqlite3 calls
+        // so it executes immediately. We catch any promise rejection just in case.
+        runMigrations(this.db).catch((err: any) => {
+            console.error('Phase 2 migration failed:', err);
+        });
     }
 
     saveRun(run: TestRun): void {
@@ -67,8 +80,8 @@ export class TestDatabase {
 
         const insertResult = this.db.prepare(`
       INSERT INTO test_results 
-      (id, run_id, description, status, score, actual_output, expected_output, error, duration, tokens, cost)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, run_id, description, prompt, variables, expect, config, file_path, status, score, actual_output, expected_output, error, duration, tokens, cost)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
         for (const result of run.results) {
@@ -76,6 +89,11 @@ export class TestDatabase {
                 result.id,
                 run.id,
                 result.testCase.description,
+                typeof result.testCase.prompt === 'string' ? result.testCase.prompt : JSON.stringify(result.testCase.prompt),
+                result.testCase.variables ? JSON.stringify(result.testCase.variables) : null,
+                typeof result.testCase.expect === 'string' ? result.testCase.expect : JSON.stringify(result.testCase.expect),
+                result.testCase.config ? JSON.stringify(result.testCase.config) : null,
+                result.testCase.filePath || null,
                 result.status,
                 result.score,
                 result.actualOutput,
@@ -111,21 +129,45 @@ export class TestDatabase {
       SELECT * FROM test_results WHERE run_id = ?
     `).all(runId) as any[];
 
-        return results.map(r => ({
-            id: r.id,
-            testCase: { description: r.description } as any,
-            status: r.status,
-            score: r.score,
-            actualOutput: r.actual_output,
-            expectedOutput: r.expected_output,
-            error: r.error,
-            metadata: {
-                duration: r.duration,
-                timestamp: new Date(),
-                tokens: r.tokens,
-                cost: r.cost
-            }
-        }));
+        return results.map(r => {
+            let prompt = r.prompt;
+            try {
+                if (prompt.startsWith('{')) prompt = JSON.parse(prompt);
+            } catch (e) { }
+
+            let variables = null;
+            try {
+                if (r.variables) variables = JSON.parse(r.variables);
+            } catch (e) { }
+
+            let config = null;
+            try {
+                if (r.config) config = JSON.parse(r.config);
+            } catch (e) { }
+
+            return {
+                id: r.id,
+                testCase: {
+                    description: r.description,
+                    prompt: prompt,
+                    variables: variables,
+                    expect: r.expect || r.expected_output,
+                    config: config,
+                    filePath: r.file_path
+                },
+                status: r.status,
+                score: r.score,
+                actualOutput: r.actual_output,
+                expectedOutput: r.expected_output,
+                error: r.error,
+                metadata: {
+                    duration: r.duration,
+                    timestamp: new Date(),
+                    tokens: r.tokens,
+                    cost: r.cost
+                }
+            };
+        });
     }
 
     close(): void {

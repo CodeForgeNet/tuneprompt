@@ -7,6 +7,8 @@ import { initCommand } from './commands/init';
 import { runCommand } from './commands/run';
 import { historyCommand } from './commands/history';
 import { fixCommand } from './commands/fix';
+import { activateCommand } from './commands/activate';
+import { getLicenseInfo } from './utils/license';
 
 // Load environment variables
 dotenv.config();
@@ -56,6 +58,35 @@ program
             limit: parseInt(options.limit),
             detailed: options.detailed
         });
+    });
+
+program
+    .command('activate')
+    .argument('[subscription-id]', 'Razorpay subscription ID')
+    .description('Activate your Premium license')
+    .action(async (subscriptionId) => {
+        await activateCommand(subscriptionId);
+    });
+
+program
+    .command('status')
+    .description('Check license status')
+    .action(() => {
+        const license = getLicenseInfo();
+
+        if (!license) {
+            console.log(chalk.yellow('\n⚠️  No active license found\n'));
+            console.log(chalk.gray('You are using the free tier.\n'));
+            console.log(chalk.bold('Upgrade to Premium:'));
+            console.log(chalk.gray(`  ${chalk.blue.underline('http://localhost:8080')}\n`));
+            return;
+        }
+
+        console.log(chalk.green('\n✅ Premium License Active\n'));
+        console.log(chalk.gray(`Email: ${license.email}`));
+        console.log(chalk.gray(`Plan: ${license.plan}`));
+        console.log(chalk.gray(`Activated: ${new Date(license.activatedAt).toLocaleDateString()}`));
+        console.log(chalk.gray(`Last Verified: ${new Date(license.lastVerified).toLocaleDateString()}\n`));
     });
 
 // Watch mode implementation

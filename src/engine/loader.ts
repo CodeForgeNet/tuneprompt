@@ -10,10 +10,12 @@ export class TestLoader {
 
         if (ext === '.json') {
             const data = JSON.parse(content);
-            return Array.isArray(data) ? data : [data];
+            const tests = Array.isArray(data) ? data : [data];
+            return tests.map(t => ({ ...t, filePath: path.resolve(filePath) }));
         } else if (ext === '.yaml' || ext === '.yml') {
             const data = yaml.load(content) as any;
-            return Array.isArray(data) ? data : [data];
+            const tests = Array.isArray(data) ? data : [data];
+            return tests.map(t => ({ ...t, filePath: path.resolve(filePath) }));
         } else {
             throw new Error(`Unsupported file format: ${ext}`);
         }

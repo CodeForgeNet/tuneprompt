@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "tuneprompt": "./dist/cli.js"
+    "tuneprompt": "./dist/src/cli.js"
   },
   "files": [
     "dist",
@@ -19,7 +19,7 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-     "llm",
+    "llm",
     "testing",
     "prompts",
     "ai",
@@ -35,11 +35,12 @@
   "type": "commonjs",
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/diff": "^7.0.2",
     "@types/inquirer": "^9.0.9",
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/lodash": "^4.17.21",
-    "@types/node": "^25.0.3",
+    "@types/node": "^25.0.6",
     "@types/uuid": "^10.0.0",
     "jest": "^30.2.0",
     "nodemon": "^3.1.11",
@@ -53,17 +54,23 @@
     "axios": "^1.13.2",
     "better-sqlite3": "^12.5.0",
     "chalk": "^5.6.2",
+    "chalk-template": "^1.1.2",
     "chokidar": "^5.0.0",
+    "cli-diff": "^1.0.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.2",
     "cosmiconfig": "^9.0.0",
     "date-fns": "^4.1.0",
+    "diff": "^8.0.2",
     "dotenv": "^17.2.3",
     "inquirer": "^13.1.0",
     "js-yaml": "^4.1.1",
     "lodash": "^4.17.21",
-    "openai": "^6.15.0",
+    "openai": "^6.16.0",
     "ora": "^9.0.0",
+    "posthog-node": "^5.20.0",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
   }
 }

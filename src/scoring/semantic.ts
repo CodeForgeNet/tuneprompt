@@ -34,3 +34,50 @@ export class SemanticScorer {
         return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }
+export async function calculateSemanticSimilarity(actual: string, expected: string): Promise<number> {
+    const providersToTry = [];
+
+    // Prioritize OpenAI if key looks potentially valid
+    if (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.startsWith('api_key')) {
+        providersToTry.push('openai');
+    }
+
+    // Always try OpenRouter if key is present
+    if (process.env.OPENROUTER_API_KEY) {
+        providersToTry.push('openrouter');
+    }
+
+    // Fallback to OpenAI if nothing else was added
+    if (providersToTry.length === 0) {
+        providersToTry.push('openai');
+    }
+
+    let lastError: any;
+
+    for (const providerType of providersToTry) {
+        try {
+            let provider;
+            if (providerType === 'openai') {
+                const { OpenAIProvider } = await import('../providers/openai');
+                provider = new OpenAIProvider({
+                    apiKey: process.env.OPENAI_API_KEY || '',
+                    model: 'text-embedding-3-small'
+                });
+            } else {
+                const { OpenRouterProvider } = await import('../providers/openrouter');
+                provider = new OpenRouterProvider({
+                    apiKey: process.env.OPENROUTER_API_KEY || '',
+                    model: 'text-embedding-3-small'
+                });
+            }
+
+            const scorer = new SemanticScorer(provider);
+            return await scorer.score(expected, actual);
+        } catch (error) {
+            lastError = error;
+            continue;
+        }
+    }
+
+    throw lastError || new Error('No embedding provider available');
+}

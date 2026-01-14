@@ -9,6 +9,7 @@ export interface TestCase {
         model?: string;
         provider?: 'openai' | 'anthropic' | 'openrouter';
     };
+    filePath?: string;
 }
 
 export interface TestResult {

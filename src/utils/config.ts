@@ -60,7 +60,7 @@ export function getDefaultConfigTemplate(): string {
     },
     openrouter: {
       apiKey: process.env.OPENROUTER_API_KEY,
-      model: 'mistralai/mistral-7b-instruct:free',
+      model: 'nvidia/nemotron-3-nano-30b-a3b:free',
       maxTokens: 400,
       temperature: 0.7
     }
