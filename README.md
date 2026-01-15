@@ -1,252 +1,151 @@
-# tuneprompt 🎛️
+# TunePrompt
 
-**Stop guessing. Start measuring. Automate your prompt engineering.**
+Industrial-grade testing framework for LLM prompts
 
-`tuneprompt` is a local-first CLI framework that treats prompts like unit tests. It moves LLM evaluation from "vibes" to deterministic and semantic scoring, directly inside your CI/CD pipeline.
+## Overview
 
----
+TunePrompt is a comprehensive testing framework designed specifically for Large Language Model (LLM) prompts. It helps developers validate, test, and optimize their prompts with industrial-grade reliability and accuracy.
 
-## ⚡ The Problem
+## Features
 
-LLMs are non-deterministic. Traditional "Exact Match" testing fails because a model might be 100% correct but use different wording. This makes it difficult to maintain consistent quality and reliability in production applications that depend on LLM outputs.
+- **Multi-provider Support**: Test prompts across OpenAI, Anthropic, OpenRouter, and other LLM providers
+- **Semantic Testing**: Compare outputs using semantic similarity rather than exact matches
+- **JSON Validation**: Validate structured JSON outputs
+- **LLM-based Judging**: Use advanced LLMs to evaluate prompt quality
+- **Watch Mode**: Automatically re-run tests when files change
+- **CI/CD Integration**: Seamlessly integrate with your CI/CD pipeline
+- **Cloud Sync**: Upload results to the TunePrompt Cloud dashboard
+- **Auto-fix Engine**: Premium feature to automatically fix failing prompts using AI
+- **Detailed Reporting**: Comprehensive test reports with scores, methods, and durations
 
-## 🚀 The Solution
-
-`tuneprompt` uses **Semantic Similarity** (embeddings) to score responses based on intent and meaning, not just strings. If your prompt changes cause a regression, your build fails.
-
-### Key Features
-
-* **Semantic Scoring (FREE):** Uses local embeddings to verify output meaning against expectations.
-* **CI/CD Native:** Integrates seamlessly with GitHub Actions, GitLab CI, and other CI/CD platforms to block regressions.
-* **Watch Mode:** Iterate on prompts in real-time with instant feedback.
-* **Multi-Provider Support:** Works with OpenAI, Anthropic, OpenRouter, and custom LLM endpoints.
-* **Auto-Fix (Premium):** Don't just find errors—fix them. Our engine rewrites failing prompts automatically.
-* **Performance Metrics:** Track latency, token usage, and cost alongside semantic accuracy.
-
----
-
-## 📦 Installation
+## Installation
 
 ```bash
 npm install -g tuneprompt
 ```
 
-Or use npx without installation:
+## Quick Start
 
-```bash
-npx tuneprompt@latest run
-```
-
----
-
-## 🛠️ Quick Start
-
-### 1. Initialize your project
-
-This creates a `tuneprompt.config.js` and a sample test directory.
-
+1. Initialize a new project:
 ```bash
 tuneprompt init
 ```
 
-### 2. Define a Test Case (`tests/onboarding.json`)
+2. Create test files in the `tests` directory with your prompts and expectations
 
-```json
-{
-  "description": "User onboarding welcome message",
-  "prompt": "Generate a welcome message for a user named Alice.",
-  "expect": "Welcome, Alice! We are glad you are here.",
-  "config": {
-    "threshold": 0.85,
-    "method": "semantic"
-  }
-}
-```
-
-### 3. Run the Suite
-
+3. Run tests:
 ```bash
 tuneprompt run
 ```
 
-### 4. Watch Mode for Development
-
-Iterate on prompts with live feedback:
-
+4. Run tests with cloud sync (requires activation):
 ```bash
-tuneprompt watch
+tuneprompt run --cloud
 ```
 
----
+## Commands
 
-## 🧪 Test Configuration
+- `tuneprompt init`: Initialize a new TunePrompt project
+- `tuneprompt run`: Run prompt tests
+- `tuneprompt run --watch`: Run tests in watch mode
+- `tuneprompt run --cloud`: Run tests and upload results to cloud
+- `tuneprompt run --ci`: Run tests in CI mode
+- `tuneprompt fix`: Auto-fix failing prompts (Premium feature)
+- `tuneprompt history`: View test run history
+- `tuneprompt activate [subscription-id]`: Activate your Premium license
+- `tuneprompt status`: Check license status
 
-Tests are defined as JSON files in your test directory. Each test includes:
+## Configuration
 
-- `description`: Human-readable description of the test
-- `prompt`: The input prompt to test
-- `expect`: Expected output for semantic comparison
-- `config`: Test-specific configuration options
+TunePrompt uses a configuration file to define providers and settings. The default location is `tuneprompt.config.js` in your project root.
 
-### Configuration Options
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `threshold` | Number | Semantic similarity threshold (0.0 - 1.0) |
-| `method` | String | Scoring method (`semantic`, `exact`, `regex`) |
-| `provider` | String | LLM provider to use for this test |
-| `timeout` | Number | Request timeout in milliseconds |
-
----
-
-## 🤖 Continuous Integration
-
-Ensure prompt integrity on every Pull Request. Add this to `.github/workflows/prompt-test.yml`:
-
-```yaml
-name: Prompt Integrity Check
-on: [pull_request]
-jobs:
-  test-prompts:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - name: Install & Test
-        run: |
-          npm install -g tuneprompt
-          tuneprompt run --ci
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-For GitLab CI, add this to `.gitlab-ci.yml`:
-
-```yaml
-prompt-tests:
-  stage: test
-  script:
-    - npm install -g tuneprompt
-    - tuneprompt run --ci
-  variables:
-    OPENAI_API_KEY: $CI_OPENAI_API_KEY
-```
-
----
-
-## 🧠 Premium: The "Auto-Fix" Engine
-
-**Stop tweaking words manually.** When a test fails, `tuneprompt` doesn't just complain—it solves.
-
-```bash
-tuneprompt fix
-```
-
-The engine analyzes the failure, extracts constraints, and uses iterative meta-prompting to **rewrite your prompt** until it passes the test.
-
----
-
-## 📜 Configuration
-
-Create a `tuneprompt.config.js` file in your project root:
-
+Example configuration:
 ```javascript
-// tuneprompt.config.js
 module.exports = {
   providers: {
     openai: {
       apiKey: process.env.OPENAI_API_KEY,
       model: 'gpt-4o',
-      temperature: 0.7
     },
     anthropic: {
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: 'claude-3-5-sonnet'
+      model: 'claude-3-opus-20240229',
     },
     openrouter: {
       apiKey: process.env.OPENROUTER_API_KEY,
-      model: 'openai/gpt-4o'
+      model: 'openai/gpt-4o',
     }
   },
-  testDir: './tests',           // Directory containing test files
-  threshold: 0.8,              // Default semantic similarity
-  timeout: 30000,              // Default request timeout (ms)
-  concurrency: 5,              // Number of concurrent requests
-  verbose: false               // Enable detailed logging
+  threshold: 0.85,
+  testDir: './tests',
+  outputFormat: 'table'
 };
 ```
 
-### Environment Variables
+## Test File Format
 
-Set these environment variables to configure your LLM providers:
+Tests are defined in JSON files in the `tests` directory. Each test file contains an array of test cases:
 
-- `OPENAI_API_KEY` - OpenAI API key
-- `ANTHROPIC_API_KEY` - Anthropic API key
-- `OPENROUTER_API_KEY` - OpenRouter API key
-- `TUNEPROMPT_LICENSE_KEY` - Premium license key
-
----
-
-## 🛠️ CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `tuneprompt init` | Initialize a new project with config and sample tests |
-| `tuneprompt run` | Run all tests once |
-| `tuneprompt watch` | Watch for changes and run tests automatically |
-| `tuneprompt fix` | Auto-fix failing prompts (premium) |
-| `tuneprompt report` | Generate detailed test reports |
-| `tuneprompt activate` | Activate premium features |
-
-### CLI Options
-
-- `--ci` - CI mode (exits with code 1 on test failure)
-- `--verbose` - Show detailed output
-- `--report` - Generate test reports in various formats
-- `--provider` - Override default provider for this run
-- `--threshold` - Override default threshold for this run
-
----
-
-## 📊 Reporting
-
-Generate detailed reports in multiple formats:
-
-```bash
-# Generate HTML report
-tuneprompt run --report html
-
-# Generate JSON report
-tuneprompt run --report json
-
-# Generate JUnit XML for CI integration
-tuneprompt run --report junit
+```json
+[
+  {
+    "description": "User onboarding welcome message",
+    "prompt": "Generate a friendly welcome message for a user named {{name}}.",
+    "variables": {
+      "name": "Alice"
+    },
+    "expect": "Welcome, Alice! We are glad you are here.",
+    "config": {
+      "threshold": 0.85,
+      "method": "semantic",
+      "model": "gpt-4o",
+      "provider": "openai"
+    }
+  }
+]
 ```
 
----
+## Testing Methods
 
-## 🔐 Privacy & Security
+- `exact`: Exact string match
+- `semantic`: Semantic similarity comparison
+- `json`: JSON structure validation
+- `llm-judge`: LLM-based evaluation
 
-- All semantic comparisons happen locally using open-source embedding models
-- Your prompts and expected outputs never leave your machine (unless using premium cloud features)
-- API keys are only sent to the respective LLM providers
-- Premium features offer optional cloud processing for faster results
+## Cloud Integration
 
----
+TunePrompt offers cloud synchronization for storing test results and viewing them in a dashboard. To use cloud features:
 
-## 🤝 Contributing
+1. Purchase a subscription at [TunePrompt website]
+2. Activate your license:
+```bash
+tuneprompt activate [your-subscription-id]
+```
+3. Run tests with cloud sync:
+```bash
+tuneprompt run --cloud
+```
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+## Premium Features
 
----
+- **Auto-fix Engine**: Automatically repair failing prompts using AI
+- **Cloud sync & team collaboration**: Store results in the cloud and collaborate with your team
+- **Advanced diagnostics**: Detailed insights and recommendations
 
-## ⚖️ License
+## Environment Variables
 
-MIT © Tuneprompt. Premium features require a license key via `tuneprompt activate`.
+Create a `.env` file in your project root with your API keys:
 
-For commercial use and enterprise support, contact us at [contact@tuneprompt.com](mailto:contact@tuneprompt.com).
+```env
+OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+```
 
----
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+MIT
