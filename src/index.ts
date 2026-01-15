@@ -2,7 +2,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { runCommand } from './commands/run'; // From Phase 1
+import { runCommand, runTests } from './commands/run'; // From Phase 1
 import { fixCommand } from './commands/fix';
 import { activateCommand } from './commands/activate';
 import { getLicenseInfo } from './utils/license';
@@ -21,7 +21,9 @@ program
     .option('-w, --watch', 'Watch mode for continuous testing')
     .option('--ci', 'CI mode (exit with error code on failure)')
     .option('--cloud', 'Upload results to cloud dashboard')
-    .action(runCommand);
+    .action(async (options) => {
+        await runTests(options);
+    });
 
 // New fix command (Premium)
 program

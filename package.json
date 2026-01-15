@@ -1,6 +1,6 @@
 {
   "name": "tuneprompt",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Industrial-grade testing framework for LLM prompts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

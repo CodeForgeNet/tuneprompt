@@ -1,7 +1,5 @@
 import axios from 'axios';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import { loadLicense } from '../utils/license';
 
 export interface RunData {
     project_id: string;
@@ -29,7 +27,7 @@ export interface TestResult {
     actual_output: string;
     score?: number;
     method: string;
-    status: 'pass' | 'fail';
+    status: 'pass' | 'fail' | 'error';
     model: string;
     tokens_used?: number;
     latency_ms?: number;
@@ -43,7 +41,7 @@ export class CloudService {
     private subscriptionId?: string;
 
     constructor() {
-        this.backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+        this.backendUrl = process.env.TUNEPROMPT_API_URL || process.env.BACKEND_URL || 'http://localhost:3000';
     }
 
     async init() {
@@ -52,13 +50,8 @@ export class CloudService {
     }
 
     private async getSubscriptionId(): Promise<string | undefined> {
-        try {
-            const configPath = path.join(os.homedir(), '.tuneprompt', 'license.json');
-            const config = JSON.parse(await fs.readFile(configPath, 'utf-8'));
-            return config.subscription_id;
-        } catch {
-            return undefined;
-        }
+        const license = loadLicense();
+        return license?.subscriptionId;
     }
 
     async uploadRun(data: RunData): Promise<{ success: boolean; run_id?: string; url?: string; error?: string }> {

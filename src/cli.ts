@@ -4,7 +4,8 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import * as dotenv from 'dotenv';
 import { initCommand } from './commands/init';
-import { runCommand } from './commands/run';
+import { runCommand as runCommandObj } from './commands/run';
+import { runTests, RunOptions } from './commands/run';
 import { historyCommand } from './commands/history';
 import { fixCommand } from './commands/fix';
 import { activateCommand } from './commands/activate';
@@ -33,11 +34,12 @@ program
     .option('-c, --config <path>', 'Path to config file')
     .option('-w, --watch', 'Watch mode for continuous testing')
     .option('--ci', 'CI mode (exit with error code on failure)')
+    .option('--cloud', 'Upload results to Tuneprompt Cloud')
     .action(async (options) => {
         if (options.watch) {
             await runWatchMode(options);
         } else {
-            await runCommand(options);
+            await runTests(options);
         }
     });
 
@@ -109,12 +111,12 @@ async function runWatchMode(options: any) {
 
     watcher.on('change', async (path: string) => {
         console.log(chalk.dim(`\n📝 Detected change in ${path}\n`));
-        await runCommand(options);
+        await runTests(options);
     });
 
     watcher.on('add', async (path: string) => {
         console.log(chalk.dim(`\n➕ New test file: ${path}\n`));
-        await runCommand(options);
+        await runTests(options);
     });
 }
 

@@ -48,115 +48,120 @@ function displayRunSummary(results: TestResult[]): void {
     }
 }
 
+// Extract the core run functionality to a separate function
+export async function runTests(options: RunOptions = {}) {
+  const startTime = Date.now();
+  const spinner = ora('Loading configuration...').start();
+
+  try {
+      // Load config
+      const config = await loadConfig(options.config);
+      spinner.succeed('Configuration loaded');
+
+      // Load tests
+      spinner.start('Loading test cases...');
+      const loader = new TestLoader();
+      const testCases = loader.loadTestDir(config.testDir || './tests');
+
+      if (testCases.length === 0) {
+          spinner.fail('No test cases found');
+          process.exit(1);
+      }
+
+      spinner.succeed(`Loaded ${testCases.length} test case(s)`);
+
+      // Run tests
+      spinner.start('Running tests...');
+      const runner = new TestRunner(config);
+      const results = await runner.runTests(testCases);
+      spinner.stop();
+
+      // Save to database
+      const db = new TestDatabase();
+      db.saveRun(results);
+      db.close();
+
+      // Report results
+      const reporter = new TestReporter();
+      reporter.printResults(results, config.outputFormat);
+
+      // Calculate results for cloud upload
+      const testResults = results.results.map((result: TestResult) => {
+        // Map from internal TestResult to cloud service TestResult
+        const mappedResult: import('../services/cloud.service').TestResult = {
+          test_name: result.testCase.description,
+          test_description: result.testCase.description,
+          prompt: typeof result.testCase.prompt === 'string'
+            ? result.testCase.prompt
+            : JSON.stringify(result.testCase.prompt),
+          input_data: result.testCase.variables,
+          expected_output: result.expectedOutput,
+          actual_output: result.actualOutput,
+          score: result.score,
+          method: result.testCase.config?.method || 'exact',
+          status: result.status,
+          model: result.metadata.provider || '',
+          tokens_used: result.metadata.tokens,
+          latency_ms: result.metadata.duration,
+          cost_usd: result.metadata.cost,
+          error_message: result.error,
+          error_type: undefined, // No error type in current TestResult interface
+        };
+        return mappedResult;
+      });
+
+      // Calculate total cost from all test results
+      const totalCost = results.results.reduce((sum, result) => {
+        return sum + (result.metadata.cost || 0);
+      }, 0);
+
+      const resultsSummary = {
+        totalTests: results.results.length,
+        passedTests: results.passed,
+        failedTests: results.failed,
+        durationMs: Date.now() - startTime,
+        totalCost: totalCost || 0.05, // fallback value
+        tests: testResults,
+      };
+
+      // Print results to console (existing logic)
+      console.log(chalk.green(`\n✅ ${resultsSummary.passedTests} passed`));
+      console.log(chalk.red(`❌ ${resultsSummary.failedTests} failed\n`));
+
+      // Show upsell hint if tests failed
+      displayRunSummary(results.results);
+
+      // NEW: Cloud upload logic
+      const isCI = options.ci ||
+                   process.env.CI === 'true' ||
+                   !!process.env.GITHUB_ACTIONS ||
+                   !!process.env.GITLAB_CI;
+
+      const shouldUpload = options.cloud || isCI;
+
+      if (shouldUpload) {
+        await uploadToCloud(resultsSummary, options);
+      }
+
+      // Exit with error code if tests failed
+      if (resultsSummary.failedTests > 0) {
+        process.exit(1);
+      }
+
+  } catch (error: any) {
+      spinner.fail('Test run failed');
+      console.error(chalk.red(error.message));
+      process.exit(1);
+  }
+}
+
 export const runCommand = new Command('run')
   .description('Run prompt tests')
   .option('--cloud', 'Upload results to Tuneprompt Cloud')
   .option('--ci', 'Run in CI mode (auto-enables --cloud)')
   .action(async (options) => {
-    const startTime = Date.now();
-    const spinner = ora('Loading configuration...').start();
-
-    try {
-        // Load config
-        const config = await loadConfig(options.config);
-        spinner.succeed('Configuration loaded');
-
-        // Load tests
-        spinner.start('Loading test cases...');
-        const loader = new TestLoader();
-        const testCases = loader.loadTestDir(config.testDir || './tests');
-
-        if (testCases.length === 0) {
-            spinner.fail('No test cases found');
-            process.exit(1);
-        }
-
-        spinner.succeed(`Loaded ${testCases.length} test case(s)`);
-
-        // Run tests
-        spinner.start('Running tests...');
-        const runner = new TestRunner(config);
-        const results = await runner.runTests(testCases);
-        spinner.stop();
-
-        // Save to database
-        const db = new TestDatabase();
-        db.saveRun(results);
-        db.close();
-
-        // Report results
-        const reporter = new TestReporter();
-        reporter.printResults(results, config.outputFormat);
-
-        // Calculate results for cloud upload
-        const testResults = results.results.map((result: TestResult) => {
-          // Map from internal TestResult to cloud service TestResult
-          const mappedResult: import('../services/cloud.service').TestResult = {
-            test_name: result.testCase.description,
-            test_description: result.testCase.description,
-            prompt: typeof result.testCase.prompt === 'string'
-              ? result.testCase.prompt
-              : JSON.stringify(result.testCase.prompt),
-            input_data: result.testCase.variables,
-            expected_output: result.expectedOutput,
-            actual_output: result.actualOutput,
-            score: result.score,
-            method: result.testCase.config?.method || 'exact',
-            status: result.status,
-            model: result.metadata.provider || '',
-            tokens_used: result.metadata.tokens,
-            latency_ms: result.metadata.duration,
-            cost_usd: result.metadata.cost,
-            error_message: result.error,
-            error_type: undefined, // No error type in current TestResult interface
-          };
-          return mappedResult;
-        });
-
-        // Calculate total cost from all test results
-        const totalCost = results.results.reduce((sum, result) => {
-          return sum + (result.metadata.cost || 0);
-        }, 0);
-
-        const resultsSummary = {
-          totalTests: results.results.length,
-          passedTests: results.passed,
-          failedTests: results.failed,
-          durationMs: Date.now() - startTime,
-          totalCost: totalCost || 0.05, // fallback value
-          tests: testResults,
-        };
-
-        // Print results to console (existing logic)
-        console.log(chalk.green(`\n✅ ${resultsSummary.passedTests} passed`));
-        console.log(chalk.red(`❌ ${resultsSummary.failedTests} failed\n`));
-
-        // Show upsell hint if tests failed
-        displayRunSummary(results.results);
-
-        // NEW: Cloud upload logic
-        const isCI = options.ci ||
-                     process.env.CI === 'true' ||
-                     !!process.env.GITHUB_ACTIONS ||
-                     !!process.env.GITLAB_CI;
-
-        const shouldUpload = options.cloud || isCI;
-
-        if (shouldUpload) {
-          await uploadToCloud(resultsSummary, options);
-        }
-
-        // Exit with error code if tests failed
-        if (resultsSummary.failedTests > 0) {
-          process.exit(1);
-        }
-
-    } catch (error: any) {
-        spinner.fail('Test run failed');
-        console.error(chalk.red(error.message));
-        process.exit(1);
-    }
-});
+    await runTests(options);
+  });
 
 async function uploadToCloud(results: {
   totalTests: number;
@@ -182,13 +187,16 @@ async function uploadToCloud(results: {
   try {
     const projects = await cloudService.getProjects();
     if (projects.length === 0) {
+      console.log(chalk.blue('📁 Creating default project...'));
       const project = await cloudService.createProject('Default Project');
       projectId = project.id;
+      console.log(chalk.green(`✅ Project created: ${projectId}`));
     } else {
       projectId = projects[0].id; // Use first project
+      console.log(chalk.gray(`📋 Using existing project: ${projectId}`));
     }
   } catch (error) {
-    console.log(chalk.yellow('⚠️  Failed to get project'));
+    console.log(chalk.yellow('⚠️  Failed to get project'), error);
     return;
   }
 
