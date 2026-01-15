@@ -12,40 +12,40 @@ import { LicenseManager, getLicenseInfo } from '../utils/license';
 import { TestResult } from '../types';
 
 export interface RunOptions {
-    config?: string;
-    watch?: boolean;
-    ci?: boolean;
-    cloud?: boolean;
+  config?: string;
+  watch?: boolean;
+  ci?: boolean;
+  cloud?: boolean;
 }
 
 // At the end of your test run reporter
 function displayRunSummary(results: TestResult[]): void {
-    const failed = results.filter(r => r.status === 'fail');
-    const passed = results.filter(r => r.status === 'pass');
+  const failed = results.filter(r => r.status === 'fail');
+  const passed = results.filter(r => r.status === 'pass');
 
-    console.log(chalk.bold.white('\n' + '='.repeat(60)));
-    console.log(chalk.bold.white('Test Summary'));
-    console.log(chalk.bold.white('='.repeat(60)));
-    console.log(chalk.green(`✓ Passed: ${passed.length}`));
-    console.log(chalk.red(`✗ Failed: ${failed.length}`));
-    console.log(chalk.gray(`Total: ${results.length}`));
-    console.log(chalk.bold.white('='.repeat(60) + '\n'));
+  console.log(chalk.bold.white('\n' + '='.repeat(60)));
+  console.log(chalk.bold.white('Test Summary'));
+  console.log(chalk.bold.white('='.repeat(60)));
+  console.log(chalk.green(`✓ Passed: ${passed.length}`));
+  console.log(chalk.red(`✗ Failed: ${failed.length}`));
+  console.log(chalk.gray(`Total: ${results.length}`));
+  console.log(chalk.bold.white('='.repeat(60) + '\n'));
 
-    // UPSELL MESSAGE (NEW)
-    if (failed.length > 0) {
-        console.log(chalk.yellow('⚠️  ' + failed.length + ' test(s) failed'));
-        console.log(chalk.gray('\nDon\'t waste time debugging manually.'));
-        console.log(chalk.cyan('Run ') + chalk.bold.white('tuneprompt fix') + chalk.cyan(' to let AI repair these prompts instantly.\n'));
+  // UPSELL MESSAGE (NEW)
+  if (failed.length > 0) {
+    console.log(chalk.yellow('⚠️  ' + failed.length + ' test(s) failed'));
+    console.log(chalk.gray('\nDon\'t waste time debugging manually.'));
+    console.log(chalk.cyan('Run ') + chalk.bold.white('tuneprompt fix') + chalk.cyan(' to let AI repair these prompts instantly.\n'));
 
-        // Check license status
-        const licenseManager = new LicenseManager();
-        licenseManager.hasFeature('fix').then((hasAccess: boolean) => {
-            if (!hasAccess) {
-                console.log(chalk.gray('Unlock fix with: ') + chalk.white('http://localhost:8080'));
-                console.log(chalk.gray('Already have a key? ') + chalk.white('tuneprompt activate <key>\n'));
-            }
-        });
-    }
+    // Check license status
+    const licenseManager = new LicenseManager();
+    licenseManager.hasFeature('fix').then((hasAccess: boolean) => {
+      if (!hasAccess) {
+        console.log(chalk.gray('Unlock fix with: ') + chalk.white('https://tuneprompt.com/pricing'));
+        console.log(chalk.gray('Already have a key? ') + chalk.white('tuneprompt activate <key>\n'));
+      }
+    });
+  }
 }
 
 // Extract the core run functionality to a separate function
@@ -54,104 +54,104 @@ export async function runTests(options: RunOptions = {}) {
   const spinner = ora('Loading configuration...').start();
 
   try {
-      // Load config
-      const config = await loadConfig(options.config);
-      spinner.succeed('Configuration loaded');
+    // Load config
+    const config = await loadConfig(options.config);
+    spinner.succeed('Configuration loaded');
 
-      // Load tests
-      spinner.start('Loading test cases...');
-      const loader = new TestLoader();
-      const testCases = loader.loadTestDir(config.testDir || './tests');
+    // Load tests
+    spinner.start('Loading test cases...');
+    const loader = new TestLoader();
+    const testCases = loader.loadTestDir(config.testDir || './tests');
 
-      if (testCases.length === 0) {
-          spinner.fail('No test cases found');
-          process.exit(1);
-      }
+    if (testCases.length === 0) {
+      spinner.fail('No test cases found');
+      process.exit(1);
+    }
 
-      spinner.succeed(`Loaded ${testCases.length} test case(s)`);
+    spinner.succeed(`Loaded ${testCases.length} test case(s)`);
 
-      // Run tests
-      spinner.start('Running tests...');
-      const runner = new TestRunner(config);
-      const results = await runner.runTests(testCases);
-      spinner.stop();
+    // Run tests
+    spinner.start('Running tests...');
+    const runner = new TestRunner(config);
+    const results = await runner.runTests(testCases);
+    spinner.stop();
 
-      // Save to database
-      const db = new TestDatabase();
-      db.saveRun(results);
-      db.close();
+    // Save to database
+    const db = new TestDatabase();
+    db.saveRun(results);
+    db.close();
 
-      // Report results
-      const reporter = new TestReporter();
-      reporter.printResults(results, config.outputFormat);
+    // Report results
+    const reporter = new TestReporter();
+    reporter.printResults(results, config.outputFormat);
 
-      // Calculate results for cloud upload
-      const testResults = results.results.map((result: TestResult) => {
-        // Map from internal TestResult to cloud service TestResult
-        const mappedResult: import('../services/cloud.service').TestResult = {
-          test_name: result.testCase.description,
-          test_description: result.testCase.description,
-          prompt: typeof result.testCase.prompt === 'string'
-            ? result.testCase.prompt
-            : JSON.stringify(result.testCase.prompt),
-          input_data: result.testCase.variables,
-          expected_output: result.expectedOutput,
-          actual_output: result.actualOutput,
-          score: result.score,
-          method: result.testCase.config?.method || 'exact',
-          status: result.status,
-          model: result.metadata.provider || '',
-          tokens_used: result.metadata.tokens,
-          latency_ms: result.metadata.duration,
-          cost_usd: result.metadata.cost,
-          error_message: result.error,
-          error_type: undefined, // No error type in current TestResult interface
-        };
-        return mappedResult;
-      });
-
-      // Calculate total cost from all test results
-      const totalCost = results.results.reduce((sum, result) => {
-        return sum + (result.metadata.cost || 0);
-      }, 0);
-
-      const resultsSummary = {
-        totalTests: results.results.length,
-        passedTests: results.passed,
-        failedTests: results.failed,
-        durationMs: Date.now() - startTime,
-        totalCost: totalCost || 0.05, // fallback value
-        tests: testResults,
+    // Calculate results for cloud upload
+    const testResults = results.results.map((result: TestResult) => {
+      // Map from internal TestResult to cloud service TestResult
+      const mappedResult: import('../services/cloud.service').CloudTestResult = {
+        test_name: result.testCase.description,
+        test_description: result.testCase.description,
+        prompt: typeof result.testCase.prompt === 'string'
+          ? result.testCase.prompt
+          : JSON.stringify(result.testCase.prompt),
+        input_data: result.testCase.variables,
+        expected_output: result.expectedOutput,
+        actual_output: result.actualOutput,
+        score: result.score,
+        method: result.testCase.config?.method || 'exact',
+        status: result.status,
+        model: result.metadata.provider || '',
+        tokens_used: result.metadata.tokens,
+        latency_ms: result.metadata.duration,
+        cost_usd: result.metadata.cost,
+        error_message: result.error,
+        error_type: undefined, // No error type in current TestResult interface
       };
+      return mappedResult;
+    });
 
-      // Print results to console (existing logic)
-      console.log(chalk.green(`\n✅ ${resultsSummary.passedTests} passed`));
-      console.log(chalk.red(`❌ ${resultsSummary.failedTests} failed\n`));
+    // Calculate total cost from all test results
+    const totalCost = results.results.reduce((sum, result) => {
+      return sum + (result.metadata.cost || 0);
+    }, 0);
 
-      // Show upsell hint if tests failed
-      displayRunSummary(results.results);
+    const resultsSummary = {
+      totalTests: results.results.length,
+      passedTests: results.passed,
+      failedTests: results.failed,
+      durationMs: Date.now() - startTime,
+      totalCost: totalCost || 0.05, // fallback value
+      tests: testResults,
+    };
 
-      // NEW: Cloud upload logic
-      const isCI = options.ci ||
-                   process.env.CI === 'true' ||
-                   !!process.env.GITHUB_ACTIONS ||
-                   !!process.env.GITLAB_CI;
+    // Print results to console (existing logic)
+    console.log(chalk.green(`\n✅ ${resultsSummary.passedTests} passed`));
+    console.log(chalk.red(`❌ ${resultsSummary.failedTests} failed\n`));
 
-      const shouldUpload = options.cloud || isCI;
+    // Show upsell hint if tests failed
+    displayRunSummary(results.results);
 
-      if (shouldUpload) {
-        await uploadToCloud(resultsSummary, options);
-      }
+    // NEW: Cloud upload logic
+    const isCI = options.ci ||
+      process.env.CI === 'true' ||
+      !!process.env.GITHUB_ACTIONS ||
+      !!process.env.GITLAB_CI;
 
-      // Exit with error code if tests failed
-      if (resultsSummary.failedTests > 0) {
-        process.exit(1);
-      }
+    const shouldUpload = options.cloud || isCI;
+
+    if (shouldUpload) {
+      await uploadToCloud(resultsSummary, options);
+    }
+
+    // Exit with error code if tests failed
+    if (resultsSummary.failedTests > 0) {
+      process.exit(1);
+    }
 
   } catch (error: any) {
-      spinner.fail('Test run failed');
-      console.error(chalk.red(error.message));
-      process.exit(1);
+    spinner.fail('Test run failed');
+    console.error(chalk.red(error.message));
+    process.exit(1);
   }
 }
 
@@ -169,7 +169,7 @@ async function uploadToCloud(results: {
   failedTests: number;
   durationMs: number;
   totalCost: number;
-  tests: import('../services/cloud.service').TestResult[];
+  tests: import('../services/cloud.service').CloudTestResult[];
 }, options: any) {
   const cloudService = new CloudService();
   await cloudService.init();

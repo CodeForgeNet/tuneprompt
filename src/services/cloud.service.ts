@@ -15,10 +15,10 @@ export interface RunData {
     cost_usd: number;
     started_at: string;
     completed_at: string;
-    test_results: TestResult[];
+    test_results: CloudTestResult[];
 }
 
-export interface TestResult {
+export interface CloudTestResult {
     test_name: string;
     test_description?: string;
     prompt: string;
@@ -41,7 +41,7 @@ export class CloudService {
     private subscriptionId?: string;
 
     constructor() {
-        this.backendUrl = process.env.TUNEPROMPT_API_URL || process.env.BACKEND_URL || 'http://localhost:3000';
+        this.backendUrl = process.env.TUNEPROMPT_API_URL || process.env.BACKEND_URL || 'https://api.tuneprompt.com';
     }
 
     async init() {

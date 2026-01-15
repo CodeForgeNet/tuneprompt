@@ -136,7 +136,7 @@ function showUpgradePrompt() {
     console.log('  ✅ Unlimited fix attempts\n');
 
     console.log(chalk.bold('Get Premium:'));
-    console.log(`  1. Buy a license: ${chalk.blue.underline('http://localhost:8080')}`);
+    console.log(`  1. Buy a license: ${chalk.blue.underline('https://tuneprompt.com/pricing')}`);
     console.log(`  2. Activate: ${chalk.gray('tuneprompt activate <your-key>')}\n`);
     console.log(chalk.yellow('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
 }

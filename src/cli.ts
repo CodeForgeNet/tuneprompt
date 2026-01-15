@@ -19,7 +19,7 @@ const program = new Command();
 program
     .name('tuneprompt')
     .description('Industrial-grade testing framework for LLM prompts')
-    .version('0.1.0');
+    .version('1.0.0');
 
 program
     .command('init')
@@ -83,7 +83,7 @@ program
             console.log(chalk.yellow('\n⚠️  No active license found\n'));
             console.log(chalk.gray('You are using the free tier.\n'));
             console.log(chalk.bold('Upgrade to Premium:'));
-            console.log(chalk.gray(`  ${chalk.blue.underline('http://localhost:8080')}\n`));
+            console.log(chalk.gray('  ' + chalk.blue.underline('https://tuneprompt.com/pricing') + '\n'));
             return;
         }
 

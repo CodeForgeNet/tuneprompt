@@ -95,7 +95,7 @@ async function verifyWithBackend(subscriptionId: string): Promise<boolean> {
     try {
         // Call your backend API (we'll create this in Week 3)
         const response = await axios.post(
-            `${process.env.TUNEPROMPT_API_URL || 'http://localhost:3000'}/api/verify-license`,
+            `${process.env.TUNEPROMPT_API_URL || 'https://api.tuneprompt.com'}/api/verify-license`,
             {
                 subscriptionId
             },

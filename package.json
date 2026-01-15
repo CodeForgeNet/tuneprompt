@@ -2,10 +2,18 @@
   "name": "tuneprompt",
   "version": "1.0.0",
   "description": "Industrial-grade testing framework for LLM prompts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CodeForgeNet/tuneprompt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CodeForgeNet/tuneprompt/issues"
+  },
+  "homepage": "https://tuneprompt.com",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "tuneprompt": "./dist/src/cli.js"
+    "tuneprompt": "./dist/cli.js"
   },
   "files": [
     "dist",

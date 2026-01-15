@@ -1,5 +1,9 @@
 # TunePrompt
 
+[![npm version](https://img.shields.io/npm/v/tuneprompt.svg?style=flat-square)](https://www.npmjs.com/package/tuneprompt)
+[![npm downloads](https://img.shields.io/npm/dm/tuneprompt.svg?style=flat-square)](https://www.npmjs.com/package/tuneprompt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+
 Industrial-grade testing framework for LLM prompts
 
 ## Overview
@@ -116,7 +120,7 @@ Tests are defined in JSON files in the `tests` directory. Each test file contain
 
 TunePrompt offers cloud synchronization for storing test results and viewing them in a dashboard. To use cloud features:
 
-1. Purchase a subscription at [TunePrompt website]
+1. Purchase a subscription at [https://tuneprompt.com](https://tuneprompt.com)
 2. Activate your license:
 ```bash
 tuneprompt activate [your-subscription-id]
