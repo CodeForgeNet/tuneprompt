@@ -9,7 +9,7 @@
   "bugs": {
     "url": "https://github.com/CodeForgeNet/tuneprompt/issues"
   },
-  "homepage": "https://tuneprompt.com",
+  "homepage": "https://www.tuneprompt.xyz",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

@@ -83,7 +83,7 @@ program
             console.log(chalk.yellow('\n⚠️  No active license found\n'));
             console.log(chalk.gray('You are using the free tier.\n'));
             console.log(chalk.bold('Upgrade to Premium:'));
-            console.log(chalk.gray('  ' + chalk.blue.underline('https://tuneprompt.com/pricing') + '\n'));
+            console.log(chalk.gray('  ' + chalk.blue.underline('https://www.tuneprompt.xyz/pricing') + '\n'));
             return;
         }
 

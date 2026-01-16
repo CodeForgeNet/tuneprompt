@@ -41,7 +41,7 @@ function displayRunSummary(results: TestResult[]): void {
     const licenseManager = new LicenseManager();
     licenseManager.hasFeature('fix').then((hasAccess: boolean) => {
       if (!hasAccess) {
-        console.log(chalk.gray('Unlock fix with: ') + chalk.white('https://tuneprompt.com/pricing'));
+        console.log(chalk.gray('Unlock fix with: ') + chalk.white('https://www.tuneprompt.xyz/pricing'));
         console.log(chalk.gray('Already have a key? ') + chalk.white('tuneprompt activate <key>\n'));
       }
     });

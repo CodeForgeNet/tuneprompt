@@ -120,7 +120,7 @@ Tests are defined in JSON files in the `tests` directory. Each test file contain
 
 TunePrompt offers cloud synchronization for storing test results and viewing them in a dashboard. To use cloud features:
 
-1. Purchase a subscription at [https://tuneprompt.com](https://tuneprompt.com)
+1. Purchase a subscription at [https://www.tuneprompt.xyz](https://www.tuneprompt.xyz)
 2. Activate your license:
 ```bash
 tuneprompt activate [your-subscription-id]
