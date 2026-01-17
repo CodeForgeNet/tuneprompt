@@ -62,9 +62,6 @@ export async function initCommand() {
         const envContent = `OPENAI_API_KEY=your_key_here
 ANTHROPIC_API_KEY=your_key_here
 OPENROUTER_API_KEY=your_key_here
-
-# For self-hosted or local testing:
-# TUNEPROMPT_API_URL=http://localhost:3000
 `;
         fs.writeFileSync(envPath, envContent);
         console.log(chalk.green('✓ Created .env'));

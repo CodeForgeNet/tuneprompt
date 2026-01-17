@@ -41,7 +41,7 @@ export class CloudService {
     private subscriptionId?: string;
 
     constructor() {
-        this.backendUrl = process.env.TUNEPROMPT_API_URL || process.env.BACKEND_URL || 'https://api.tuneprompt.com';
+        this.backendUrl = process.env.TUNEPROMPT_API_URL || process.env.BACKEND_URL || 'https://i8e3mu8jlk.execute-api.ap-south-1.amazonaws.com/dev';
     }
 
     async init() {
@@ -55,8 +55,16 @@ export class CloudService {
     }
 
     async uploadRun(data: RunData): Promise<{ success: boolean; run_id?: string; url?: string; error?: string }> {
-        if (!this.subscriptionId) {
+        // Enforce Pro plan check
+        const license = loadLicense();
+        if (!this.subscriptionId || !license) {
             return { success: false, error: 'Not activated. Run `tuneprompt activate` first.' };
+        }
+
+        // Check for specific pro plans (if we ever add free tiers)
+        const proPlans = ['pro-monthly', 'pro-yearly', 'lifetime'];
+        if (!proPlans.includes(license.plan)) {
+            return { success: false, error: 'Cloud features are restricted to Pro users. Please upgrade your plan.' };
         }
 
         try {
