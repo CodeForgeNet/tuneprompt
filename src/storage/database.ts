@@ -55,9 +55,17 @@ export class TestDatabase {
       CREATE INDEX IF NOT EXISTS idx_result_run ON test_results(run_id);
     `);
 
+        // Migration for uploaded status
+        try {
+            this.db.exec(`ALTER TABLE test_runs ADD COLUMN uploaded INTEGER DEFAULT 0`);
+        } catch (e: any) {
+            // Column might already exist
+            if (!e.message.includes('duplicate column name')) {
+                // Ignore safe errors
+            }
+        }
+
         // Run external migrations (Phase 2)
-        // Note: runMigrations is async but contains synchronous better-sqlite3 calls
-        // so it executes immediately. We catch any promise rejection just in case.
         runMigrations(this.db).catch((err: any) => {
             console.error('Phase 2 migration failed:', err);
         });
@@ -65,8 +73,8 @@ export class TestDatabase {
 
     saveRun(run: TestRun): void {
         const insertRun = this.db.prepare(`
-      INSERT INTO test_runs (id, timestamp, total_tests, passed, failed, duration)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO test_runs (id, timestamp, total_tests, passed, failed, duration, uploaded)
+      VALUES (?, ?, ?, ?, ?, ?, 0)
     `);
 
         insertRun.run(
@@ -122,6 +130,28 @@ export class TestDatabase {
             duration: run.duration,
             results: this.getRunResults(run.id)
         }));
+    }
+
+    getPendingUploads(): TestRun[] {
+        const runs = this.db.prepare(`
+      SELECT * FROM test_runs 
+      WHERE uploaded = 0 OR uploaded IS NULL
+      ORDER BY timestamp ASC
+    `).all() as any[];
+
+        return runs.map(run => ({
+            id: run.id,
+            timestamp: new Date(run.timestamp),
+            totalTests: run.total_tests,
+            passed: run.passed,
+            failed: run.failed,
+            duration: run.duration,
+            results: this.getRunResults(run.id)
+        }));
+    }
+
+    markAsUploaded(runId: string): void {
+        this.db.prepare(`UPDATE test_runs SET uploaded = 1 WHERE id = ?`).run(runId);
     }
 
     private getRunResults(runId: string): TestResult[] {

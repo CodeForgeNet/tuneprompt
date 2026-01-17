@@ -77,61 +77,17 @@ export async function runTests(options: RunOptions = {}) {
     spinner.stop();
 
     // Save to database
+    // Save to database
     const db = new TestDatabase();
     db.saveRun(results);
-    db.close();
+
+    // Calculate results for cloud upload (and for sync logic)
+    const currentRunId = results.id; // Assuming results has ID
 
     // Report results
     const reporter = new TestReporter();
     reporter.printResults(results, config.outputFormat);
 
-    // Calculate results for cloud upload
-    const testResults = results.results.map((result: TestResult) => {
-      // Map from internal TestResult to cloud service TestResult
-      const mappedResult: import('../services/cloud.service').CloudTestResult = {
-        test_name: result.testCase.description,
-        test_description: result.testCase.description,
-        prompt: typeof result.testCase.prompt === 'string'
-          ? result.testCase.prompt
-          : JSON.stringify(result.testCase.prompt),
-        input_data: result.testCase.variables,
-        expected_output: result.expectedOutput,
-        actual_output: result.actualOutput,
-        score: result.score,
-        method: result.testCase.config?.method || 'exact',
-        status: result.status,
-        model: result.metadata.provider || '',
-        tokens_used: result.metadata.tokens,
-        latency_ms: result.metadata.duration,
-        cost_usd: result.metadata.cost,
-        error_message: result.error,
-        error_type: undefined, // No error type in current TestResult interface
-      };
-      return mappedResult;
-    });
-
-    // Calculate total cost from all test results
-    const totalCost = results.results.reduce((sum, result) => {
-      return sum + (result.metadata.cost || 0);
-    }, 0);
-
-    const resultsSummary = {
-      totalTests: results.results.length,
-      passedTests: results.passed,
-      failedTests: results.failed,
-      durationMs: Date.now() - startTime,
-      totalCost: totalCost || 0.05, // fallback value
-      tests: testResults,
-    };
-
-    // Print results to console (existing logic)
-    console.log(chalk.green(`\n✅ ${resultsSummary.passedTests} passed`));
-    console.log(chalk.red(`❌ ${resultsSummary.failedTests} failed\n`));
-
-    // Show upsell hint if tests failed
-    displayRunSummary(results.results);
-
-    // NEW: Cloud upload logic
     const isCI = options.ci ||
       process.env.CI === 'true' ||
       !!process.env.GITHUB_ACTIONS ||
@@ -140,11 +96,13 @@ export async function runTests(options: RunOptions = {}) {
     const shouldUpload = options.cloud || isCI;
 
     if (shouldUpload) {
-      await uploadToCloud(resultsSummary, options);
+      await syncPendingRuns(db, options);
     }
 
+    db.close();
+
     // Exit with error code if tests failed
-    if (resultsSummary.failedTests > 0) {
+    if (results.failed > 0) {
       process.exit(1);
     }
 
@@ -163,44 +121,37 @@ export const runCommand = new Command('run')
     await runTests(options);
   });
 
-async function uploadToCloud(results: {
-  totalTests: number;
-  passedTests: number;
-  failedTests: number;
-  durationMs: number;
-  totalCost: number;
-  tests: import('../services/cloud.service').CloudTestResult[];
-}, options: any) {
+async function syncPendingRuns(db: TestDatabase, options: any) {
+  const pendingRuns = db.getPendingUploads();
+
+  if (pendingRuns.length === 0) return;
+
+  console.log(chalk.blue(`\n☁️  Syncing ${pendingRuns.length} pending run(s) to Cloud...`));
+
   const cloudService = new CloudService();
   await cloudService.init();
 
-  const isAuth = await cloudService.isAuthenticated();
-
-  if (!isAuth) {
-    console.log(chalk.yellow('\n⚠️  Not authenticated with Cloud.'));
-    console.log(chalk.gray('Results saved locally. Run `tuneprompt activate` to enable cloud sync\n'));
+  if (!(await cloudService.isAuthenticated())) {
+    console.log(chalk.yellow('⚠️  Not authenticated. Run `tuneprompt activate` first.'));
     return;
   }
 
-  // Get or create project
+  // Get project ID once
   let projectId: string;
   try {
     const projects = await cloudService.getProjects();
     if (projects.length === 0) {
-      console.log(chalk.blue('📁 Creating default project...'));
       const project = await cloudService.createProject('Default Project');
       projectId = project.id;
-      console.log(chalk.green(`✅ Project created: ${projectId}`));
     } else {
-      projectId = projects[0].id; // Use first project
-      console.log(chalk.gray(`📋 Using existing project: ${projectId}`));
+      projectId = projects[0].id;
     }
-  } catch (error) {
-    console.log(chalk.yellow('⚠️  Failed to get project'), error);
+  } catch (err) {
+    console.log(chalk.yellow('⚠️  Failed to get project info'));
     return;
   }
 
-  // Get Git context
+  // Common Git/Env context
   let gitContext = {};
   try {
     gitContext = {
@@ -208,41 +159,52 @@ async function uploadToCloud(results: {
       branch_name: execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim(),
       commit_message: execSync('git log -1 --pretty=%B', { encoding: 'utf-8' }).trim(),
     };
-  } catch {
-    // Not a git repo
-  }
+  } catch { }
 
-  // Detect CI provider
   let ciProvider;
   if (process.env.GITHUB_ACTIONS) ciProvider = 'github';
   else if (process.env.GITLAB_CI) ciProvider = 'gitlab';
   else if (process.env.JENKINS_HOME) ciProvider = 'jenkins';
   else if (process.env.CIRCLECI) ciProvider = 'circleci';
 
-  // Prepare run data
-  const runData: import('../services/cloud.service').RunData = {
-    project_id: projectId,
-    environment: options.ci || process.env.CI ? 'ci' : 'local',
-    ci_provider: ciProvider,
-    total_tests: results.totalTests,
-    passed_tests: results.passedTests,
-    failed_tests: results.failedTests,
-    duration_ms: results.durationMs,
-    cost_usd: results.totalCost,
-    started_at: new Date(Date.now() - results.durationMs).toISOString(),
-    completed_at: new Date().toISOString(),
-    test_results: results.tests,
-    ...gitContext,
-  };
+  // Upload each run
+  for (const run of pendingRuns) {
+    const runData: import('../services/cloud.service').RunData = {
+      project_id: projectId,
+      environment: options.ci ? 'ci' : 'local',
+      ci_provider: ciProvider,
+      total_tests: run.totalTests,
+      passed_tests: run.passed,
+      failed_tests: run.failed,
+      duration_ms: run.duration,
+      cost_usd: run.results.reduce((sum, r) => sum + (r.metadata.cost || 0), 0) || 0.05, // fallback
+      started_at: new Date(run.timestamp.getTime() - run.duration).toISOString(),
+      completed_at: run.timestamp.toISOString(),
+      test_results: run.results.map(r => ({
+        test_name: r.testCase.description,
+        test_description: r.testCase.description,
+        prompt: typeof r.testCase.prompt === 'string' ? r.testCase.prompt : JSON.stringify(r.testCase.prompt),
+        input_data: r.testCase.variables,
+        expected_output: r.expectedOutput,
+        actual_output: r.actualOutput,
+        score: r.score,
+        method: r.testCase.config?.method || 'exact',
+        status: r.status,
+        model: r.metadata.provider || '',
+        tokens_used: r.metadata.tokens,
+        latency_ms: r.metadata.duration,
+        cost_usd: r.metadata.cost,
+      })),
+      ...gitContext // Applying current git context to old runs slightly inaccurate but acceptable
+    };
 
-  console.log(chalk.blue('\n☁️  Uploading results to Cloud...'));
+    const uploadResult = await cloudService.uploadRun(runData);
 
-  const uploadResult = await cloudService.uploadRun(runData);
-
-  if (uploadResult.success) {
-    console.log(chalk.green('✅ Results uploaded successfully'));
-    console.log(chalk.gray(`View at: ${uploadResult.url}\n`));
-  } else {
-    console.log(chalk.yellow('⚠️  Failed to upload results:'), uploadResult.error);
+    if (uploadResult.success) {
+      db.markAsUploaded(run.id);
+      console.log(chalk.green(`  ✓ Uploaded run from ${run.timestamp.toLocaleTimeString()}`));
+    } else {
+      console.log(chalk.red(`  ✗ Failed to upload run ${run.id}: ${uploadResult.error}`));
+    }
   }
 }
