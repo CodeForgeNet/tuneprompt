@@ -11,19 +11,35 @@ import { generateErrorContext } from './constraintExtractor';
 export class PromptOptimizer {
     private anthropic?: Anthropic;
     private openai?: OpenAI;
+    private openrouter?: OpenAI;
 
     constructor() {
         const anthropicKey = process.env.ANTHROPIC_API_KEY;
-        if (anthropicKey && !anthropicKey.startsWith('api_key') && anthropicKey !== 'phc_xxxxx') {
+        if (anthropicKey &&
+            !anthropicKey.includes('your_key') &&
+            !anthropicKey.startsWith('api_key') &&
+            anthropicKey !== 'phc_xxxxx') {
             this.anthropic = new Anthropic({
                 apiKey: anthropicKey
             });
         }
 
         const openaiKey = process.env.OPENAI_API_KEY;
-        if (openaiKey && !openaiKey.startsWith('api_key')) {
+        if (openaiKey && !openaiKey.includes('your_key')) {
             this.openai = new OpenAI({
                 apiKey: openaiKey
+            });
+        }
+
+        const openrouterKey = process.env.OPENROUTER_API_KEY;
+        if (openrouterKey && !openrouterKey.includes('your_key')) {
+            this.openrouter = new OpenAI({
+                baseURL: 'https://openrouter.ai/api/v1',
+                apiKey: openrouterKey,
+                defaultHeaders: {
+                    'HTTP-Referer': 'https://tuneprompt.xyz',
+                    'X-Title': 'TunePrompt CLI',
+                },
             });
         }
     }
@@ -103,7 +119,7 @@ export class PromptOptimizer {
                 if (provider === 'anthropic' && this.anthropic) {
                     console.log(`⚡ Using Anthropic for candidate generation...`);
                     const response = await this.anthropic.messages.create({
-                        model: 'claude-sonnet-4-20250514',
+                        model: 'claude-3-5-sonnet-20240620',
                         max_tokens: 4000,
                         temperature: 0.7, // Some creativity for prompt rewriting
                         messages: [{
@@ -163,16 +179,36 @@ export class PromptOptimizer {
                             score: 0
                         }
                     ];
-                } else if (provider === 'openrouter') {
-                    // For OpenRouter, we'll use the shadowTester to get a response
+                } else if (provider === 'openrouter' && this.openrouter) {
                     console.log(`⚡ Using OpenRouter for candidate generation...`);
-                    // Since OpenRouter is used in shadow testing, we'll use a different approach
-                    // For now, we'll return a basic fallback since OpenRouter doesn't support structured outputs as well
-                    return [{
-                        prompt: this.createFallbackPrompt(failedTest),
-                        reasoning: 'Generated using fallback method',
-                        score: 0
-                    }];
+                    const response = await this.openrouter.chat.completions.create({
+                        model: 'anthropic/claude-3-sonnet', // Default robust model on OpenRouter
+                        messages: [{
+                            role: 'user',
+                            content: metaPrompt
+                        }],
+                        response_format: { type: 'json_object' }
+                    });
+
+                    const content = response.choices[0]?.message?.content;
+                    if (!content) {
+                        // Fallback if model doesn't support JSON mode or returns empty
+                        throw new Error('No content returned from OpenRouter');
+                    }
+
+                    const parsed = JSON.parse(content);
+                    return [
+                        {
+                            prompt: parsed.candidateA.prompt,
+                            reasoning: parsed.candidateA.reasoning,
+                            score: 0
+                        },
+                        {
+                            prompt: parsed.candidateB.prompt,
+                            reasoning: parsed.candidateB.reasoning,
+                            score: 0
+                        }
+                    ];
                 }
             } catch (error: any) {
                 console.log(`⚠️  ${provider} provider failed for candidate generation: ${error.message}`);
@@ -184,7 +220,7 @@ export class PromptOptimizer {
         console.error('All providers failed for candidate generation');
         return [{
             prompt: this.createFallbackPrompt(failedTest),
-            reasoning: 'Fallback prompt with basic improvements',
+            reasoning: 'Generated using fallback method',
             score: 0
         }];
     }

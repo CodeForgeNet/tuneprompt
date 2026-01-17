@@ -60,9 +60,13 @@ export class TestDatabase {
             this.db.exec(`ALTER TABLE test_runs ADD COLUMN uploaded INTEGER DEFAULT 0`);
         } catch (e: any) {
             // Column might already exist
-            if (!e.message.includes('duplicate column name')) {
-                // Ignore safe errors
-            }
+        }
+
+        // Migration for provider column
+        try {
+            this.db.exec(`ALTER TABLE test_results ADD COLUMN provider TEXT`);
+        } catch (e: any) {
+            // Column might already exist
         }
 
         // Run external migrations (Phase 2)
@@ -88,8 +92,8 @@ export class TestDatabase {
 
         const insertResult = this.db.prepare(`
       INSERT INTO test_results 
-      (id, run_id, description, prompt, variables, expect, config, file_path, status, score, actual_output, expected_output, error, duration, tokens, cost)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, run_id, description, prompt, variables, expect, config, file_path, status, score, actual_output, expected_output, error, duration, tokens, cost, provider)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
         for (const result of run.results) {
@@ -109,7 +113,8 @@ export class TestDatabase {
                 result.error || null,
                 result.metadata.duration,
                 result.metadata.tokens || null,
-                result.metadata.cost || null
+                result.metadata.cost || null,
+                result.metadata.provider || null
             );
         }
     }
@@ -194,7 +199,8 @@ export class TestDatabase {
                     duration: r.duration,
                     timestamp: new Date(),
                     tokens: r.tokens,
-                    cost: r.cost
+                    cost: r.cost,
+                    provider: r.provider
                 }
             };
         });
