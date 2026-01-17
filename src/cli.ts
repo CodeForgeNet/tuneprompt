@@ -11,6 +11,9 @@ import { fixCommand } from './commands/fix';
 import { activateCommand } from './commands/activate';
 import { getLicenseInfo } from './utils/license';
 
+// Read version from package.json
+const packageJson = require('../package.json');
+
 // Load environment variables
 dotenv.config();
 
@@ -19,7 +22,7 @@ const program = new Command();
 program
     .name('tuneprompt')
     .description('Industrial-grade testing framework for LLM prompts')
-    .version('1.0.0');
+    .version(packageJson.version);
 
 program
     .command('init')

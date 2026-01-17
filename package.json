@@ -1,6 +1,6 @@
 {
   "name": "tuneprompt",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Industrial-grade testing framework for LLM prompts",
   "repository": {
     "type": "git",
@@ -64,12 +64,11 @@
     "chalk": "^5.6.2",
     "chalk-template": "^1.1.2",
     "chokidar": "^5.0.0",
-    "cli-diff": "^1.0.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.2",
     "cosmiconfig": "^9.0.0",
     "date-fns": "^4.1.0",
-    "diff": "^8.0.2",
+    "diff": "^8.0.3",
     "dotenv": "^17.2.3",
     "inquirer": "^13.1.0",
     "js-yaml": "^4.1.1",
@@ -77,8 +76,6 @@
     "openai": "^6.16.0",
     "ora": "^9.0.0",
     "posthog-node": "^5.20.0",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
   }
 }
