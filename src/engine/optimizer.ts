@@ -219,9 +219,11 @@ export class PromptOptimizer {
      */
     private createFallbackPrompt(test: FailedTest): string {
         // Extract the core intent from the original prompt
-        // Remove any existing "You must provide..." prefixes to avoid duplication
+        // Remove any existing "fix" instructions we might have added previously
         let corePrompt = test.prompt
-            .replace(/You must provide a response that includes the following key information:\n[^\n]*\n\n/g, '')
+            .replace(/\n\nYour response must match this exactly: "[\s\S]*?$/g, '')
+            .replace(/\n\nIMPORTANT: You must respond with valid JSON only[\s\S]*?$/g, '')
+            .replace(/\n\nBe concise and match the expected output format exactly[\s\S]*?$/g, '')
             .trim();
 
         // For JSON errors, create a structured prompt

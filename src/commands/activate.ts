@@ -47,31 +47,10 @@ export async function activateCommand(subscriptionId?: string) {
         subscriptionId = answers.subscriptionId;
     }
 
-    const { email } = await inquirer.prompt([{
-        type: 'input',
-        name: 'email',
-        message: 'Enter your email address:',
-        validate: (input: string) => {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            return emailRegex.test(input) || 'Please enter a valid email address';
-        }
-    }]);
-
-    const { plan } = await inquirer.prompt([{
-        type: 'list',
-        name: 'plan',
-        message: 'Select your plan:',
-        choices: [
-            { name: 'Pro Monthly (₹999/month)', value: 'pro-monthly' },
-            { name: 'Pro Yearly (₹9,999/year)', value: 'pro-yearly' },
-            { name: 'Lifetime (₹24,999 one-time)', value: 'lifetime' }
-        ]
-    }]);
-
     // Activate the license
     const spinner = ora('Verifying subscription...').start();
 
-    const success = await activateLicense(subscriptionId!, email, plan);
+    const success = await activateLicense(subscriptionId!);
 
     if (success) {
         spinner.succeed('License activated successfully!');

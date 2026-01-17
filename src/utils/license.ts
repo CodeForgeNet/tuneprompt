@@ -91,24 +91,23 @@ function needsVerification(license: LicenseData): boolean {
 /**
  * Verify license with backend API
  */
-async function verifyWithBackend(subscriptionId: string): Promise<boolean> {
+async function verifyWithBackend(subscriptionId: string): Promise<{ valid: boolean; email?: string; plan?: string }> {
     try {
-        // Call your backend API (we'll create this in Week 3)
         const response = await axios.post(
             `${process.env.TUNEPROMPT_API_URL || 'https://api.tuneprompt.com'}/api/verify-license`,
-            {
-                subscriptionId
-            },
-            {
-                timeout: 5000
-            }
+            { subscriptionId },
+            { timeout: 5000 }
         );
 
-        return response.data.valid === true;
+        return {
+            valid: response.data.valid === true,
+            email: response.data.email, // Assuming backend returns email
+            plan: response.data.plan // Assuming backend returns plan
+        };
     } catch (error: any) {
-        // Fail open: if API is down, allow access for paid users
+        // Fail open: if API is down, allow access for paid users but without updating meta
         console.warn('License verification failed (network issue), allowing access');
-        return true;
+        return { valid: true };
     }
 }
 
@@ -129,9 +128,9 @@ export async function checkLicense(): Promise<boolean> {
     }
 
     // Always verify with backend to get real-time status
-    const isValid = await verifyWithBackend(license.subscriptionId);
+    const { valid } = await verifyWithBackend(license.subscriptionId);
 
-    if (isValid) {
+    if (valid) {
         // Update last verified timestamp
         license.lastVerified = new Date().toISOString();
         saveLicense(license);
@@ -147,22 +146,20 @@ export async function checkLicense(): Promise<boolean> {
  * Activate a new license
  */
 export async function activateLicense(
-    subscriptionId: string,
-    email: string,
-    plan: 'pro-monthly' | 'pro-yearly' | 'lifetime'
+    subscriptionId: string
 ): Promise<boolean> {
     try {
-        // Verify the subscription is valid
-        const isValid = await verifyWithBackend(subscriptionId);
+        // Verify the subscription is valid and get details
+        const { valid, email, plan } = await verifyWithBackend(subscriptionId);
 
-        if (!isValid) {
+        if (!valid) {
             return false;
         }
 
         const licenseData: LicenseData = {
             subscriptionId,
-            email,
-            plan,
+            email: email || 'unknown@user.com', // Fallback if backend doesn't return
+            plan: (plan as any) || 'pro-monthly', // Fallback
             activatedAt: new Date().toISOString(),
             lastVerified: new Date().toISOString(),
             instanceId: generateInstanceId()
