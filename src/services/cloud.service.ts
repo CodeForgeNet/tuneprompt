@@ -84,7 +84,7 @@ export class CloudService {
 
     async createProject(name: string, description?: string): Promise<any> {
         if (!this.subscriptionId) {
-            throw new Error('Not activated');
+            throw new Error('Not activated. Run `tuneprompt activate` first.');
         }
 
         try {
@@ -96,12 +96,17 @@ export class CloudService {
                         'Content-Type': 'application/json',
                         'x-subscription-id': this.subscriptionId,
                     },
+                    timeout: 30000,
                 }
             );
 
             return response.data.project;
         } catch (error: any) {
-            throw new Error(error.response?.data?.error || error.message);
+            const msg = error.response?.data?.error || error.message;
+            if (msg.includes('SSL') || msg.includes('EPROTO')) {
+                throw new Error(`Cloud connection failed (SSL error). Check your internet or TUNEPROMPT_API_URL. (${msg})`);
+            }
+            throw new Error(msg);
         }
     }
 
