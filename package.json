@@ -1,6 +1,6 @@
 {
   "name": "tuneprompt",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Industrial-grade testing framework for LLM prompts",
   "repository": {
     "type": "git",
