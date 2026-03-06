@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import { FailedTest } from '../types/fix';
 import { calculateSemanticSimilarity } from '../scoring/semantic';
 
@@ -106,6 +107,8 @@ async function runSpecificTest(
             return runAnthropicTest(prompt, input, model);
         case 'openai':
             return runOpenAITest(prompt, input, model);
+        case 'gemini':
+            return runGeminiTest(prompt, input, model);
         case 'openrouter':
             return runOpenRouterTest(prompt, input, model);
         default:
@@ -119,6 +122,8 @@ function getApiKeyForProvider(provider: string): string | undefined {
             return process.env.ANTHROPIC_API_KEY;
         case 'openai':
             return process.env.OPENAI_API_KEY;
+        case 'gemini':
+            return process.env.GEMINI_API_KEY;
         case 'openrouter':
             return process.env.OPENROUTER_API_KEY;
         default:
@@ -193,6 +198,28 @@ async function runOpenRouterTest(
     });
 
     return response.choices[0]?.message?.content || '';
+}
+
+async function runGeminiTest(
+    prompt: string,
+    input: Record<string, any> | undefined,
+    model: string
+): Promise<string> {
+    const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY
+    });
+
+    const finalPrompt = interpolateVariables(prompt, input);
+
+    const response = await ai.models.generateContent({
+        model: model,
+        contents: finalPrompt,
+        config: {
+            maxOutputTokens: 2000
+        }
+    });
+
+    return response.text || '';
 }
 
 function interpolateVariables(
