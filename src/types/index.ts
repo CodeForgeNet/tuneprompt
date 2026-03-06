@@ -7,7 +7,7 @@ export interface TestCase {
         threshold?: number;
         method?: 'exact' | 'semantic' | 'json' | 'llm-judge';
         model?: string;
-        provider?: 'openai' | 'anthropic' | 'openrouter';
+        provider?: 'openai' | 'anthropic' | 'gemini' | 'openrouter';
     };
     filePath?: string;
 }
@@ -51,6 +51,7 @@ export interface TunePromptConfig {
     providers: {
         openai?: ProviderConfig;
         anthropic?: ProviderConfig;
+        gemini?: ProviderConfig;
         openrouter?: ProviderConfig;
     };
     threshold?: number;

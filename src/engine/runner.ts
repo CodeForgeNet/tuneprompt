@@ -3,6 +3,7 @@ import { TestCase, TestResult, TestRun, TunePromptConfig } from "../types";
 import { BaseProvider } from "../providers/base";
 import { OpenAIProvider } from "../providers/openai";
 import { AnthropicProvider } from "../providers/anthropic";
+import { GeminiProvider } from "../providers/gemini";
 import { OpenRouterProvider } from "../providers/openrouter";
 import { exactMatch } from "../scoring/exact-match";
 import { validateJSON } from "../scoring/json-validator";
@@ -33,6 +34,11 @@ export class TestRunner {
     if (this.config.providers.openrouter) {
       const provider = new OpenRouterProvider(this.config.providers.openrouter);
       this.providers.set("openrouter", provider);
+    }
+
+    if (this.config.providers.gemini) {
+      const provider = new GeminiProvider(this.config.providers.gemini);
+      this.providers.set("gemini", provider);
     }
   }
 
@@ -66,7 +72,7 @@ export class TestRunner {
     const startTime = Date.now();
 
     // Define fallback order: Primary -> Fallbacks
-    const fallbackChain = ["openai", "anthropic", "openrouter"];
+    const fallbackChain = ["openai", "anthropic", "gemini", "openrouter"];
 
     // Determine starting provider
     const initialProvider = testCase.config?.provider || "openai";
@@ -146,8 +152,7 @@ export class TestRunner {
 
           if (calculatedScore === undefined) {
             throw new Error(
-              `Semantic scoring failed. Last error: ${
-                lastScoringError?.message || "Unknown error"
+              `Semantic scoring failed. Last error: ${lastScoringError?.message || "Unknown error"
               }`
             );
           }
