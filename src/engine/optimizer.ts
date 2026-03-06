@@ -14,8 +14,10 @@ export class PromptOptimizer {
     private anthropic?: Anthropic;
     private openai?: OpenAI;
     private openrouter?: OpenAI;
+    maxIterations: number;
 
-    constructor() {
+    constructor(options: { maxIterations?: number } = {}) {
+        this.maxIterations = options.maxIterations || 3;
         const anthropicKey = process.env.ANTHROPIC_API_KEY;
         if (anthropicKey && !anthropicKey.includes('your_key') && !anthropicKey.startsWith('api_key')) {
             this.anthropic = new Anthropic({ apiKey: anthropicKey });
@@ -64,7 +66,7 @@ export class PromptOptimizer {
         let bestAggregateScore = initialAggregateScore;
         let conversation: Array<{ role: 'user' | 'assistant', content: string }> = [];
 
-        while (iterations < 3) {
+        while (iterations < this.maxIterations) {
             iterations++;
             console.log(`🚀 Optimization Attempt #${iterations}...`);
 
@@ -145,7 +147,7 @@ export class PromptOptimizer {
         }
 
         if (!bestResult) {
-            throw new Error('All fix attempts failed to resolve the regression or improve the aggregate score after 3 iterations.');
+            throw new Error(`All fix attempts failed to resolve the regression or improve the aggregate score after ${this.maxIterations} iterations.`);
         }
 
         return bestResult;
