@@ -74,7 +74,7 @@ PLEASE ANALYZE THIS FAILURE AND ADJUST YOUR STRATEGY.
 ` : ''}
 
 ${passingExamples && passingExamples.length > 0 ? `### Successful Performance Examples
-Here are some examples where the current prompt actually worked. Use these as a reference to ensure the fix doesn't break these patterns:
+Here are examples of inputs/outputs that work well. Inject these as a few-shot examples into the new prompt.
 ${JSON.stringify(passingExamples, null, 2)}
 ` : ''}
 
@@ -105,6 +105,11 @@ ${input.expectedOutput}
 
 ${input.failureFeedback ? `[FAILURE FEEDBACK]: ${input.failureFeedback}` : ''}
 
+${input.passingExamples && input.passingExamples.length > 0 ? `### Successful Performance Examples
+Here are examples of inputs/outputs that work well. Inject these as a few-shot examples into the new prompt.
+${JSON.stringify(input.passingExamples, null, 2)}
+` : ''}
+
 Rewrite the prompt to GUARANTEE valid JSON output. Use these techniques:
 1. Explicitly state: "Return ONLY valid JSON, no markdown, no explanations"
 2. Provide the exact schema structure
@@ -133,6 +138,11 @@ ${input.actualOutput}
 """
 
 ${input.failureFeedback ? `[FAILURE FEEDBACK]: ${input.failureFeedback}` : ''}
+
+${input.passingExamples && input.passingExamples.length > 0 ? `### Successful Performance Examples
+Here are examples of inputs/outputs that work well. Inject these as a few-shot examples into the new prompt.
+${JSON.stringify(input.passingExamples, null, 2)}
+` : ''}
 
 Rewrite to ensure the model stays on topic and includes all required information.
 `;

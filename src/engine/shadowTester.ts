@@ -1,8 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
-import { GoogleGenAI } from '@google/genai';
 import { FailedTest } from '../types/fix';
 import { calculateSemanticSimilarity } from '../scoring/semantic';
+import { ProviderFactory } from '../providers/factory';
+import { interpolateVariables } from '../utils/interpolation';
 
 export interface ShadowTestResult {
     score: number;
@@ -39,13 +38,27 @@ export async function runShadowTest(
         };
     }
 
-    const provider = test.config?.provider;
+    const providerName = test.config?.provider;
     const model = test.config?.model;
 
     // If specific provider/model is requested, use it directly (Strict Mode)
-    if (provider && model) {
+    if (providerName && model) {
         try {
-            const output = await runSpecificTest(candidatePrompt, test.input, provider, model);
+            const apiKey = ProviderFactory.getApiKey(providerName);
+            if (!apiKey) {
+                throw new Error(`No API key found for provider: ${providerName}`);
+            }
+
+            const provider = ProviderFactory.create(providerName, {
+                apiKey,
+                model,
+                maxTokens: 2000
+            });
+
+            const finalPrompt = interpolateVariables(candidatePrompt, test.input);
+            const response = await provider.complete(finalPrompt);
+            const output = response.content;
+
             const { score, failureReason } = await scoreOutput(output, test.expectedOutput, test.errorType);
             return {
                 score,
@@ -54,7 +67,7 @@ export async function runShadowTest(
                 failureReason
             };
         } catch (error: any) {
-            console.log(`⚠️ Specified provider ${provider} failed: ${error.message}`);
+            console.log(`⚠️ Specified provider ${providerName} failed: ${error.message}`);
             throw new Error(`Failed to validate on target model: ${error.message}`);
         }
     }
@@ -91,149 +104,6 @@ export async function runSuiteShadowTest(
     };
 }
 
-async function runSpecificTest(
-    prompt: string,
-    input: Record<string, any> | undefined,
-    provider: string,
-    model: string
-): Promise<string> {
-    const apiKey = getApiKeyForProvider(provider);
-    if (!apiKey) {
-        throw new Error(`No API key found for provider: ${provider}`);
-    }
-
-    switch (provider) {
-        case 'anthropic':
-            return runAnthropicTest(prompt, input, model);
-        case 'openai':
-            return runOpenAITest(prompt, input, model);
-        case 'gemini':
-            return runGeminiTest(prompt, input, model);
-        case 'openrouter':
-            return runOpenRouterTest(prompt, input, model);
-        default:
-            throw new Error(`Unsupported provider: ${provider}`);
-    }
-}
-
-function getApiKeyForProvider(provider: string): string | undefined {
-    switch (provider) {
-        case 'anthropic':
-            return process.env.ANTHROPIC_API_KEY;
-        case 'openai':
-            return process.env.OPENAI_API_KEY;
-        case 'gemini':
-            return process.env.GEMINI_API_KEY;
-        case 'openrouter':
-            return process.env.OPENROUTER_API_KEY;
-        default:
-            return undefined;
-    }
-}
-
-async function runAnthropicTest(
-    prompt: string,
-    input: Record<string, any> | undefined,
-    model: string
-): Promise<string> {
-    const anthropic = new Anthropic({
-        apiKey: process.env.ANTHROPIC_API_KEY
-    });
-
-    const finalPrompt = interpolateVariables(prompt, input);
-
-    const response = await anthropic.messages.create({
-        model: model,
-        max_tokens: 2000,
-        messages: [{
-            role: 'user',
-            content: finalPrompt
-        }]
-    });
-
-    const content = response.content[0];
-    return content.type === 'text' ? content.text : '';
-}
-
-async function runOpenAITest(
-    prompt: string,
-    input: Record<string, any> | undefined,
-    model: string
-): Promise<string> {
-    const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
-    });
-
-    const finalPrompt = interpolateVariables(prompt, input);
-
-    const response = await openai.chat.completions.create({
-        model: model,
-        messages: [{
-            role: 'user',
-            content: finalPrompt
-        }]
-    });
-
-    return response.choices[0]?.message?.content || '';
-}
-
-async function runOpenRouterTest(
-    prompt: string,
-    input: Record<string, any> | undefined,
-    model: string
-): Promise<string> {
-    const key = process.env.OPENROUTER_API_KEY;
-    const openai = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: key
-    });
-
-    const finalPrompt = interpolateVariables(prompt, input);
-    const response = await openai.chat.completions.create({
-        model: model,
-        messages: [{
-            role: 'user',
-            content: finalPrompt
-        }]
-    });
-
-    return response.choices[0]?.message?.content || '';
-}
-
-async function runGeminiTest(
-    prompt: string,
-    input: Record<string, any> | undefined,
-    model: string
-): Promise<string> {
-    const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY
-    });
-
-    const finalPrompt = interpolateVariables(prompt, input);
-
-    const response = await ai.models.generateContent({
-        model: model,
-        contents: finalPrompt,
-        config: {
-            maxOutputTokens: 2000
-        }
-    });
-
-    return response.text || '';
-}
-
-function interpolateVariables(
-    prompt: string,
-    variables?: Record<string, any>
-): string {
-    if (!variables) return prompt;
-
-    let result = prompt;
-    for (const [key, value] of Object.entries(variables)) {
-        result = result.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
-    }
-    return result;
-}
 
 async function scoreOutput(
     actual: string,

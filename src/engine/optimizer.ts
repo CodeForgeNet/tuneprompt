@@ -1,6 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
-import { GoogleGenAI } from '@google/genai';
 import { FailedTest, OptimizationResult, FixCandidate } from '../types/fix';
 import {
     generateOptimizationPrompt,
@@ -10,42 +7,14 @@ import {
 } from './metaPrompt';
 import { generateErrorContext } from './constraintExtractor';
 import { runShadowTest, runSuiteShadowTest } from './shadowTester';
+import { ProviderFactory } from '../providers/factory';
+import { BaseProvider } from '../providers/base';
 
 export class PromptOptimizer {
-    private anthropic?: Anthropic;
-    private openai?: OpenAI;
-    private openrouter?: OpenAI;
-    private gemini?: GoogleGenAI;
     maxIterations: number;
 
     constructor(options: { maxIterations?: number } = {}) {
         this.maxIterations = options.maxIterations || 3;
-        const anthropicKey = process.env.ANTHROPIC_API_KEY;
-        if (anthropicKey && !anthropicKey.includes('your_key') && !anthropicKey.startsWith('api_key')) {
-            this.anthropic = new Anthropic({ apiKey: anthropicKey });
-        }
-
-        const openaiKey = process.env.OPENAI_API_KEY;
-        if (openaiKey && !openaiKey.includes('your_key')) {
-            this.openai = new OpenAI({ apiKey: openaiKey });
-        }
-
-        const geminiKey = process.env.GEMINI_API_KEY;
-        if (geminiKey && !geminiKey.includes('your_key')) {
-            this.gemini = new GoogleGenAI({ apiKey: geminiKey });
-        }
-
-        const openrouterKey = process.env.OPENROUTER_API_KEY;
-        if (openrouterKey && !openrouterKey.includes('your_key')) {
-            this.openrouter = new OpenAI({
-                baseURL: 'https://openrouter.ai/api/v1',
-                apiKey: openrouterKey,
-                defaultHeaders: {
-                    'HTTP-Referer': 'https://tuneprompt.xyz',
-                    'X-Title': 'TunePrompt CLI',
-                },
-            });
-        }
     }
 
     /**
@@ -55,18 +24,15 @@ export class PromptOptimizer {
         console.log(`\n🧠 Analyzing failure: "${failedTest.description}"`);
         console.log(`📈 Full test suite size: ${suite.length}`);
 
-        // Initial aggregate score for comparison
         const initialAggregateScore = suite.reduce((sum, t) => sum + t.score, 0) / suite.length;
         console.log(`📊 Current aggregate score: ${initialAggregateScore.toFixed(2)}`);
 
-        // Extract constraints and passing examples
         const errorContext = generateErrorContext(failedTest);
         const passingExamples = suite
             .filter(t => t.score >= t.threshold)
             .slice(0, 3)
             .map(t => ({ input: t.input, output: t.expectedOutput }));
 
-        // Iterative Refinement Loop (Phase 3)
         let iterations = 0;
         let lastFailureReason: string | undefined = undefined;
         let bestResult: OptimizationResult | null = null;
@@ -77,7 +43,6 @@ export class PromptOptimizer {
             iterations++;
             console.log(`🚀 Optimization Attempt #${iterations}...`);
 
-            // Step 1: Select and generate meta-prompt or append feedback
             if (iterations === 1) {
                 const input: MetaPromptInput = {
                     originalPrompt: failedTest.prompt,
@@ -93,7 +58,6 @@ export class PromptOptimizer {
                 conversation.push({ role: 'user', content: lastFailureReason || 'Please try again.' });
             }
 
-            // Step 2: Generate candidates
             const generationResult = await this.generateCandidates(conversation, failedTest);
             const candidates = generationResult.candidates;
 
@@ -101,12 +65,10 @@ export class PromptOptimizer {
                 conversation.push({ role: 'assistant', content: generationResult.rawResponse });
             }
 
-            // Step 3: Tiered Validation
             for (const candidate of candidates) {
                 try {
                     console.log(`🧪 Testing candidate...`);
 
-                    // 1. Check primary failure first (Tiered efficiency)
                     const primaryResult = await runShadowTest(candidate.prompt, failedTest);
 
                     if (primaryResult.score < failedTest.threshold) {
@@ -118,11 +80,9 @@ export class PromptOptimizer {
 
                     console.log(`   ✅ Resolved primary error. Running anti-regression...`);
 
-                    // 2. Run full suite (Anti-Regression)
                     const suiteResult = await runSuiteShadowTest(candidate.prompt, suite);
                     console.log(`   📊 Suite aggregate score: ${suiteResult.aggregateScore.toFixed(2)}`);
 
-                    // Accept if it improves (Phase 1 Decision: Aggregate > Initial)
                     if (suiteResult.aggregateScore > bestAggregateScore) {
                         bestAggregateScore = suiteResult.aggregateScore;
                         bestResult = {
@@ -184,72 +144,53 @@ export class PromptOptimizer {
                 rawResponse: '{"candidateA": {"prompt": "Optimized candidate A", "reasoning": "Mock reasoning A"}, "candidateB": {"prompt": "Optimized candidate B", "reasoning": "Mock reasoning B"}}'
             };
         }
-        const providers = ['anthropic', 'openai', 'gemini', 'openrouter'];
-        for (const provider of providers) {
+
+        const providerPool = ['anthropic', 'openai', 'gemini', 'openrouter'];
+        const systemPrompt = "You are a prompt optimizer. Output exclusively JSON. You suggest a candidateA and candidateB. You MUST format output as: {\"candidateA\": {\"prompt\": \"...\", \"reasoning\": \"...\"}, \"candidateB\": {\"prompt\": \"...\", \"reasoning\": \"...\"}}";
+
+        for (const providerName of providerPool) {
             try {
-                if (provider === 'anthropic' && this.anthropic) {
-                    const response = await this.anthropic.messages.create({
-                        model: 'claude-3-5-sonnet-20240620',
-                        max_tokens: 4000,
-                        temperature: 0.7,
-                        messages: messages as any
-                    });
-                    const content = response.content[0];
-                    if (content.type !== 'text') throw new Error('Unexpected response type');
-                    const parsed = JSON.parse(content.text);
-                    return {
-                        candidates: [
-                            { prompt: parsed.candidateA.prompt, reasoning: parsed.candidateA.reasoning, score: 0 },
-                            { prompt: parsed.candidateB.prompt, reasoning: parsed.candidateB.reasoning, score: 0 }
-                        ],
-                        rawResponse: content.text
-                    };
-                } else if (provider === 'openai' && this.openai) {
-                    const response = await this.openai.chat.completions.create({
-                        model: 'gpt-4o',
-                        messages: messages as any,
-                        response_format: { type: 'json_object' }
-                    });
-                    const content = response.choices[0]?.message?.content;
-                    if (!content) throw new Error('No content returned');
-                    const parsed = JSON.parse(content);
-                    return {
-                        candidates: [
-                            { prompt: parsed.candidateA.prompt, reasoning: parsed.candidateA.reasoning, score: 0 },
-                            { prompt: parsed.candidateB.prompt, reasoning: parsed.candidateB.reasoning, score: 0 }
-                        ],
-                        rawResponse: content
-                    };
-                } else if (provider === 'gemini' && this.gemini) {
-                    const systemPrompt = "You are a prompt optimizer. Output exclusively JSON. You suggest a candidateA and candidateB. You MUST format output as: {\"candidateA\": {\"prompt\": \"...\", \"reasoning\": \"...\"}, \"candidateB\": {\"prompt\": \"...\", \"reasoning\": \"...\"}}";
+                const apiKey = ProviderFactory.getApiKey(providerName);
+                if (!apiKey) continue;
 
-                    const combinedMessages = messages.map(m => m.role + ': ' + m.content).join('\n');
+                // Pick a strong model for optimization if not defined
+                const model = providerName === 'anthropic' ? 'claude-3-5-sonnet-latest' :
+                    providerName === 'openai' ? 'gpt-4o' :
+                        providerName === 'gemini' ? 'gemini-1.5-pro' : undefined;
 
-                    const response = await this.gemini.models.generateContent({
-                        model: 'gemini-2.5-pro',
-                        contents: combinedMessages,
-                        config: {
-                            systemInstruction: systemPrompt,
-                            responseMimeType: 'application/json'
-                        }
-                    });
+                if (!model) continue;
 
-                    const content = response.text;
-                    if (!content) throw new Error('No content returned');
-                    const parsed = JSON.parse(content);
-                    return {
-                        candidates: [
-                            { prompt: parsed.candidateA.prompt, reasoning: parsed.candidateA.reasoning, score: 0 },
-                            { prompt: parsed.candidateB.prompt, reasoning: parsed.candidateB.reasoning, score: 0 }
-                        ],
-                        rawResponse: content
-                    };
-                }
+                const provider = ProviderFactory.create(providerName, {
+                    apiKey,
+                    model,
+                    maxTokens: 4000
+                });
+
+                // Convert conversation to a format the provider understands
+                const userContent = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+
+                const response = await provider.complete({
+                    system: systemPrompt,
+                    user: userContent
+                });
+
+                const content = response.content;
+                if (!content) throw new Error('No content returned');
+
+                const parsed = JSON.parse(content);
+                return {
+                    candidates: [
+                        { prompt: parsed.candidateA.prompt, reasoning: parsed.candidateA.reasoning, score: 0 },
+                        { prompt: parsed.candidateB.prompt, reasoning: parsed.candidateB.reasoning, score: 0 }
+                    ],
+                    rawResponse: content
+                };
             } catch (error: any) {
-                console.log(`⚠️ Candidate generation failed for ${provider}: ${error.message}`);
+                console.log(`⚠️ Candidate generation failed for ${providerName}: ${error.message}`);
                 continue;
             }
         }
+
         return {
             candidates: [{ prompt: failedTest.prompt, reasoning: 'Fallback - optimization failed', score: 0 }],
             rawResponse: ''

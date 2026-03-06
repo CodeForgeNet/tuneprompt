@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 const execAsync = promisify(exec);
 
@@ -16,7 +17,7 @@ module.exports = {
     openai: { apiKey: 'test-key', model: 'gpt-4o' }
   },
   threshold: 0.8,
-  testDir: './tests'
+  testDir: './temp_test_dir'
 };`;
     fs.writeFileSync(configPath, configContent);
 
@@ -30,26 +31,32 @@ module.exports = {
       }
     ];
 
-    if (!fs.existsSync('tests')) fs.mkdirSync('tests');
-    fs.writeFileSync('tests/temp-test.json', JSON.stringify(testFile));
+    if (!fs.existsSync('temp_test_dir')) fs.mkdirSync('temp_test_dir');
+    fs.writeFileSync('temp_test_dir/temp-test.json', JSON.stringify(testFile));
 
     // 2. Setup mock environment
     const testEnv = { ...process.env, TEST_MODE: 'true', TUNEPROMPT_MOCK_OPTIMIZER: 'true' };
 
     // 3. Run tests (will mock failures)
-    await execAsync('npx ts-node src/cli.ts run', { env: testEnv });
+    await execAsync(`npx ts-node src/cli.ts run`, { env: testEnv });
+
+    // Ensure no existing license prompts for overwrite
+    const licensePath = path.join(os.homedir(), '.tuneprompt', 'license.json');
+    if (fs.existsSync(licensePath)) {
+      fs.unlinkSync(licensePath);
+    }
 
     // 4. Activate test license
     await execAsync('npx ts-node src/cli.ts activate sub_test123', { env: testEnv });
 
     // 5. Run fix
-    const { stdout } = await execAsync('npx ts-node src/cli.ts fix -y', { env: testEnv });
+    const { stdout } = await execAsync(`npx ts-node src/cli.ts fix -y`, { env: testEnv });
 
     expect(stdout).toContain('Analyzing failure');
-    expect(stdout).toContain('optimized');
+    expect(stdout).toContain('Optimized');
 
-    // Cleanup
-    fs.unlinkSync('tests/temp-test.json');
+    fs.unlinkSync('temp_test_dir/temp-test.json');
+    if (fs.existsSync('temp_test_dir')) fs.rmdirSync('temp_test_dir');
     if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
   }, 120000); // 120s timeout since ts-node is slow
 });

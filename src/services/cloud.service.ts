@@ -41,7 +41,7 @@ export class CloudService {
     private subscriptionId?: string;
 
     constructor() {
-        this.backendUrl = process.env.TUNEPROMPT_API_URL || process.env.BACKEND_URL || 'https://i8e3mu8jlk.execute-api.ap-south-1.amazonaws.com/dev';
+        this.backendUrl = process.env.TUNEPROMPT_API_URL || 'https://api.tuneprompt.com';
     }
 
     async init() {
