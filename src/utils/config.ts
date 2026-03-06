@@ -58,6 +58,12 @@ export function getDefaultConfigTemplate(): string {
       maxTokens: 1000,
       temperature: 0.7
     },
+    gemini: {
+      apiKey: process.env.GEMINI_API_KEY,
+      model: 'gemini-2.5-flash',
+      maxTokens: 1000,
+      temperature: 0.7
+    },
     openrouter: {
       apiKey: process.env.OPENROUTER_API_KEY,
       model: 'nvidia/nemotron-3-nano-30b-a3b:free',
