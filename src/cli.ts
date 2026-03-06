@@ -49,8 +49,9 @@ program
 program
     .command('fix')
     .description('Auto-fix failing prompts using AI')
-    .action(async () => {
-        await fixCommand();
+    .option('-y, --yes', 'Automatically apply the best fix without prompting')
+    .action(async (options) => {
+        await fixCommand(options);
     });
 
 program

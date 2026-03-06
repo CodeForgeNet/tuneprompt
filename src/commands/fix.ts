@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { handleError, Errors } from '../utils/errorHandler';
 
-export async function fixCommand() {
+export async function fixCommand(options: { yes?: boolean } = {}) {
     try {
         console.log(chalk.bold.cyan('\n🔧 TunePrompt Fix\n'));
 
@@ -36,21 +36,32 @@ export async function fixCommand() {
         console.log(chalk.yellow(`\nFound ${failedTests.length} failed test(s):\n`));
 
         failedTests.forEach((test: FailedTest, index: number) => {
-            console.log(`${index + 1}. ${chalk.bold(test.description)}`);
+            const modelInfo = test.config?.model ? ` [Target: ${test.config.provider || 'unknown'}/${test.config.model}]` : '';
+            console.log(`${index + 1}. ${chalk.bold(test.description)}${chalk.cyan(modelInfo)}`);
             console.log(`   Score: ${chalk.red(test.score.toFixed(2))} (threshold: ${test.threshold})`);
         });
 
         // Step 3: Ask which tests to fix
-        const { selectedIndexes } = await inquirer.prompt([{
-            type: 'checkbox',
-            name: 'selectedIndexes',
-            message: 'Which tests would you like to fix?',
-            choices: failedTests.map((test: FailedTest, index: number) => ({
-                name: `${test.description} (score: ${test.score.toFixed(2)})`,
-                value: index,
-                checked: true
-            }))
-        }]);
+        let selectedIndexes: number[] = [];
+        if (options.yes) {
+            selectedIndexes = failedTests.map((_, i) => i);
+            console.log(chalk.gray(`\nNon-interactive mode: Automatic selection of all ${failedTests.length} tests.`));
+        } else {
+            const response = await inquirer.prompt([{
+                type: 'checkbox',
+                name: 'selectedIndexes',
+                message: 'Which tests would you like to fix?',
+                choices: failedTests.map((test: FailedTest, index: number) => {
+                    const modelInfo = test.config?.model ? ` [${test.config.provider || 'unknown'}/${test.config.model}]` : '';
+                    return {
+                        name: `${test.description} (score: ${test.score.toFixed(2)})${modelInfo}`,
+                        value: index,
+                        checked: true
+                    };
+                })
+            }]);
+            selectedIndexes = response.selectedIndexes;
+        }
 
         if (selectedIndexes.length === 0) {
             console.log(chalk.gray('\nNo tests selected. Exiting.'));
@@ -60,27 +71,36 @@ export async function fixCommand() {
         // Step 4: Optimize each selected test
         const optimizer = new PromptOptimizer();
 
+        // Load suite tests for each failing test to support anti-regression
+        const { getSuiteTests } = await import('../utils/storage');
+
         for (const index of selectedIndexes) {
             const test = failedTests[index];
+            const suite = await getSuiteTests(test.id);
 
-            console.log(chalk.bold(`\n\n━━━ Fixing: ${test.description} ━━━\n`));
+            const modelInfo = test.config?.model ? ` (Target: ${test.config.model})` : '';
+            console.log(chalk.bold(`\n\n━━━ Fixing: ${test.description}${modelInfo} ━━━\n`));
 
             try {
-                const result = await optimizer.optimize(test);
+                const result = await optimizer.optimize(test, suite);
                 await showDiff(result.originalPrompt, result.optimizedPrompt, result.reasoning);
 
                 // Ask if user wants to apply
-                const { action } = await inquirer.prompt([{
-                    type: 'rawlist',
-                    name: 'action',
-                    message: 'What would you like to do?',
-                    choices: [
-                        { name: 'Apply this fix (Updates your test file)', value: 'apply' },
-                        { name: 'Edit before applying', value: 'edit' },
-                        { name: 'Skip this fix', value: 'skip' }
-                    ],
-                    default: 0
-                }]);
+                let action = 'apply';
+                if (!options.yes) {
+                    const response = await inquirer.prompt([{
+                        type: 'rawlist',
+                        name: 'action',
+                        message: 'What would you like to do?',
+                        choices: [
+                            { name: 'Apply this fix (Updates your test file)', value: 'apply' },
+                            { name: 'Edit before applying', value: 'edit' },
+                            { name: 'Skip this fix', value: 'skip' }
+                        ],
+                        default: 0
+                    }]);
+                    action = response.action;
+                }
 
                 if (action === 'apply') {
                     await applyFix(test, result.optimizedPrompt);

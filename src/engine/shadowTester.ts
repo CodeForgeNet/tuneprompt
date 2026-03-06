@@ -1,73 +1,116 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { FailedTest } from '../types/fix';
-import { calculateSemanticSimilarity } from '../scoring/semantic'; // From Phase 1
+import { calculateSemanticSimilarity } from '../scoring/semantic';
 
 export interface ShadowTestResult {
     score: number;
     output: string;
     passed: boolean;
+    failureReason?: string;
+}
+
+export interface ShadowSuiteResult {
+    aggregateScore: number;
+    results: {
+        testId: string;
+        score: number;
+        passed: boolean;
+        output: string;
+        failureReason?: string;
+    }[];
 }
 
 /**
  * Test a candidate prompt against the original test case
- * Tries providers in sequence until one succeeds
+ * Uses specified provider/model or falls back to priority sequence
  */
 export async function runShadowTest(
     candidatePrompt: string,
-    originalTest: FailedTest
+    test: FailedTest
 ): Promise<ShadowTestResult> {
+    // For integration tests: bypass real API calls if mock mode is on
+    if (process.env.TUNEPROMPT_MOCK_OPTIMIZER === 'true') {
+        return {
+            score: 0.95,
+            output: 'Mock satisfied output',
+            passed: true
+        };
+    }
 
-    // Define provider priority order
-    const providers = ['anthropic', 'openai', 'openrouter'];
+    const provider = test.config?.provider;
+    const model = test.config?.model;
 
-    // Try each provider in order
-    for (const provider of providers) {
+    // If specific provider/model is requested, use it directly (Strict Mode)
+    if (provider && model) {
         try {
-            // Check if API key exists for this provider
-            const apiKey = getApiKeyForProvider(provider);
-            if (!apiKey || apiKey.startsWith('api_key') || apiKey === 'phc_xxxxx') {
-                // Silently skip placeholders or missing keys
-                continue;
-            }
-
-            let output: string;
-            if (provider === 'anthropic') {
-                output = await runAnthropicTest(candidatePrompt, originalTest.input);
-            } else if (provider === 'openai') {
-                output = await runOpenAITest(candidatePrompt, originalTest.input);
-            } else if (provider === 'openrouter') {
-                output = await runOpenRouterTest(candidatePrompt, originalTest.input);
-            } else {
-                continue; // Unsupported provider
-            }
-
-            // Score the output using the same method as Phase 1
-            const score = await scoreOutput(
-                output,
-                originalTest.expectedOutput,
-                originalTest.errorType
-            );
-
+            const output = await runSpecificTest(candidatePrompt, test.input, provider, model);
+            const { score, failureReason } = await scoreOutput(output, test.expectedOutput, test.errorType);
             return {
                 score,
                 output,
-                passed: score >= originalTest.threshold
+                passed: score >= test.threshold,
+                failureReason
             };
-
         } catch (error: any) {
-            console.log(`⚠️  ${provider} provider failed: ${error.message}`);
-            continue; // Try next provider
+            console.log(`⚠️ Specified provider ${provider} failed: ${error.message}`);
+            throw new Error(`Failed to validate on target model: ${error.message}`);
         }
     }
 
-    // All providers failed
-    console.error('All providers failed for shadow test');
+    // Phase 2 Decision: Fail fast if no provider/model is defined (Strict Awareness)
+    throw new Error(`Test "${test.description}" lacks provider/model configuration. Validation aborted.`);
+}
+
+/**
+ * Run a candidate prompt against multiple tests and return aggregate results
+ */
+export async function runSuiteShadowTest(
+    candidatePrompt: string,
+    tests: FailedTest[]
+): Promise<ShadowSuiteResult> {
+    const results = await Promise.all(
+        tests.map(async (test) => {
+            const result = await runShadowTest(candidatePrompt, test);
+            return {
+                testId: test.id,
+                score: result.score,
+                passed: result.passed,
+                output: result.output,
+                failureReason: result.failureReason
+            };
+        })
+    );
+
+    const aggregateScore = results.reduce((sum, r) => sum + r.score, 0) / results.length;
+
     return {
-        score: 0,
-        output: '',
-        passed: false
+        aggregateScore,
+        results
     };
+}
+
+async function runSpecificTest(
+    prompt: string,
+    input: Record<string, any> | undefined,
+    provider: string,
+    model: string
+): Promise<string> {
+    const apiKey = getApiKeyForProvider(provider);
+    if (!apiKey) {
+        throw new Error(`No API key found for provider: ${provider}`);
+    }
+
+    switch (provider) {
+        case 'anthropic':
+            return runAnthropicTest(prompt, input, model);
+        case 'openai':
+            return runOpenAITest(prompt, input, model);
+        case 'openrouter':
+            return runOpenRouterTest(prompt, input, model);
+        default:
+            throw new Error(`Unsupported provider: ${provider}`);
+    }
 }
 
 function getApiKeyForProvider(provider: string): string | undefined {
@@ -85,17 +128,17 @@ function getApiKeyForProvider(provider: string): string | undefined {
 
 async function runAnthropicTest(
     prompt: string,
-    input?: Record<string, any>
+    input: Record<string, any> | undefined,
+    model: string
 ): Promise<string> {
     const anthropic = new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    // Interpolate variables if present
     const finalPrompt = interpolateVariables(prompt, input);
 
     const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: model,
         max_tokens: 2000,
         messages: [{
             role: 'user',
@@ -109,7 +152,8 @@ async function runAnthropicTest(
 
 async function runOpenAITest(
     prompt: string,
-    input?: Record<string, any>
+    input: Record<string, any> | undefined,
+    model: string
 ): Promise<string> {
     const openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY
@@ -118,7 +162,7 @@ async function runOpenAITest(
     const finalPrompt = interpolateVariables(prompt, input);
 
     const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: model,
         messages: [{
             role: 'user',
             content: finalPrompt
@@ -130,36 +174,25 @@ async function runOpenAITest(
 
 async function runOpenRouterTest(
     prompt: string,
-    input?: Record<string, any>
+    input: Record<string, any> | undefined,
+    model: string
 ): Promise<string> {
     const key = process.env.OPENROUTER_API_KEY;
+    const openai = new OpenAI({
+        baseURL: 'https://openrouter.ai/api/v1',
+        apiKey: key
+    });
 
-    // Save original key and temporarily remove it to prevent OpenAI client confusion
-    const originalOpenAIKey = process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_API_KEY;
+    const finalPrompt = interpolateVariables(prompt, input);
+    const response = await openai.chat.completions.create({
+        model: model,
+        messages: [{
+            role: 'user',
+            content: finalPrompt
+        }]
+    });
 
-    try {
-        const openai = new OpenAI({
-            baseURL: 'https://openrouter.ai/api/v1',
-            apiKey: key
-        });
-
-        const finalPrompt = interpolateVariables(prompt, input);
-        const response = await openai.chat.completions.create({
-            model: 'nvidia/nemotron-3-nano-30b-a3b:free',
-            messages: [{
-                role: 'user',
-                content: finalPrompt
-            }]
-        });
-
-        return response.choices[0]?.message?.content || '';
-    } finally {
-        // Restore original key
-        if (originalOpenAIKey) {
-            process.env.OPENAI_API_KEY = originalOpenAIKey;
-        }
-    }
+    return response.choices[0]?.message?.content || '';
 }
 
 function interpolateVariables(
@@ -179,23 +212,31 @@ async function scoreOutput(
     actual: string,
     expected: string,
     method: string
-): Promise<number> {
+): Promise<{ score: number, failureReason?: string }> {
     switch (method) {
-        case 'semantic':
-            return await calculateSemanticSimilarity(actual, expected);
+        case 'semantic': {
+            const score = await calculateSemanticSimilarity(actual, expected);
+            return { score, failureReason: score < 0.9 ? `Semantic similarity (${score.toFixed(2)}) is low. Output did not capture expected meaning.` : undefined };
+        }
 
-        case 'exact':
-            return actual.trim() === expected.trim() ? 1.0 : 0.0;
+        case 'exact': {
+            const exactMatch = actual.trim() === expected.trim();
+            return {
+                score: exactMatch ? 1.0 : 0.0,
+                failureReason: exactMatch ? undefined : `Expected exact match but output differed.`
+            };
+        }
 
-        case 'json':
+        case 'json': {
             try {
                 JSON.parse(actual);
-                return 1.0;
-            } catch {
-                return 0.0;
+                return { score: 1.0 };
+            } catch (e: any) {
+                return { score: 0.0, failureReason: `Did not output valid JSON. Parse error: ${e.message}` };
             }
+        }
 
         default:
-            return 0.5;
+            return { score: 0.5, failureReason: `Unknown scoring method: ${method}` };
     }
 }

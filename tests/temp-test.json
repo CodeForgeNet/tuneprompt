@@ -1,0 +1,1 @@
+[{"description":"Test prompt","prompt":"Say hello","expect":"Hello! Welcome to our service.","config":{"threshold":0.8,"method":"semantic"}}]

@@ -9,6 +9,10 @@ export interface FailedTest {
     threshold: number;
     errorType: 'semantic' | 'json' | 'exact' | 'length';
     errorMessage: string;
+    config?: {
+        provider?: string;
+        model?: string;
+    };
 }
 
 export interface OptimizationResult {
@@ -20,11 +24,18 @@ export interface OptimizationResult {
         score: number;
         passed: boolean;
         output: string;
+        aggregateScore?: number;
     };
+    iterations?: number;
 }
 
 export interface FixCandidate {
     prompt: string;
     score: number;
     reasoning: string;
+    testResults?: {
+        testId: string;
+        score: number;
+        passed: boolean;
+    }[];
 }

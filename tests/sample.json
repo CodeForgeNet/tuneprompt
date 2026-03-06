@@ -1,0 +1,9 @@
+{
+  "description": "User onboarding welcome message",
+  "prompt": "Optimized candidate A",
+  "expect": "Welcome, Alice! We are glad you are here.",
+  "config": {
+    "threshold": 0.85,
+    "method": "semantic"
+  }
+}
