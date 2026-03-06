@@ -13,7 +13,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "tuneprompt": "./dist/cli.js"
+    "tuneprompt": "dist/cli.js"
   },
   "files": [
     "dist",
