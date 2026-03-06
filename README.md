@@ -10,17 +10,26 @@ Industrial-grade testing framework for LLM prompts
 
 TunePrompt is a comprehensive testing framework designed specifically for Large Language Model (LLM) prompts. It helps developers validate, test, and optimize their prompts with industrial-grade reliability and accuracy.
 
+## 🚀 What's New in v1.1.1
+
+The first production-ready release of **TunePrompt**, the industrial-grade testing framework for the modern LLM stack.
+
+- **Multi-Provider Support**: Seamlessly test across **OpenAI**, **Anthropic**, **Gemini**, and **OpenRouter**.
+- **Semantic Evaluation**: Advanced vector-based scoring to detect logic drift and nuance shifts.
+- **Auto-Fix Engine (Premium)**: AI-powered prompt optimization for failing tests.
+- **Cloud Orchestration**: Unified synchronization with the [TunePrompt Dashboard](https://www.tuneprompt.xyz).
+- **Industrial CLI**: Built-in watch mode, CI/CD integration, and historical analytics.
+
 ## Features
 
-- **Multi-provider Support**: Test prompts across OpenAI, Anthropic, OpenRouter, and other LLM providers
-- **Semantic Testing**: Compare outputs using semantic similarity rather than exact matches
-- **JSON Validation**: Validate structured JSON outputs
-- **LLM-based Judging**: Use advanced LLMs to evaluate prompt quality
-- **Watch Mode**: Automatically re-run tests when files change
-- **CI/CD Integration**: Seamlessly integrate with your CI/CD pipeline
-- **Cloud Sync**: Upload results to the TunePrompt Cloud dashboard
-- **Auto-fix Engine**: Premium feature to automatically fix failing prompts using AI
-- **Detailed Reporting**: Comprehensive test reports with scores, methods, and durations
+- **Multi-provider Support**: Native integration with Google Gemini, OpenAI, Anthropic, and OpenRouter.
+- **Semantic Testing**: Compare outputs using high-precision embedding similarity.
+- **JSON Validation**: Validate structured outputs with schema-aware checks.
+- **LLM-based Judging**: Utilize advanced providers as evaluators for qualitative metrics.
+- **Watch Mode**: Immediate feedback loop with automatic re-runs on file changes.
+- **CI/CD Ready**: Native integration patterns for industrial deployment pipelines.
+- **Cloud Sync**: Global telemetry and result storage via the dashboard.
+- **Auto-fix Engine**: Iterative refinement loop for intelligent prompt repair.
 
 ## Installation
 
