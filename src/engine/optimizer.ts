@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import { FailedTest, OptimizationResult, FixCandidate } from '../types/fix';
 import {
     generateOptimizationPrompt,
@@ -14,6 +15,7 @@ export class PromptOptimizer {
     private anthropic?: Anthropic;
     private openai?: OpenAI;
     private openrouter?: OpenAI;
+    private gemini?: GoogleGenAI;
     maxIterations: number;
 
     constructor(options: { maxIterations?: number } = {}) {
@@ -26,6 +28,11 @@ export class PromptOptimizer {
         const openaiKey = process.env.OPENAI_API_KEY;
         if (openaiKey && !openaiKey.includes('your_key')) {
             this.openai = new OpenAI({ apiKey: openaiKey });
+        }
+
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (geminiKey && !geminiKey.includes('your_key')) {
+            this.gemini = new GoogleGenAI({ apiKey: geminiKey });
         }
 
         const openrouterKey = process.env.OPENROUTER_API_KEY;
@@ -177,7 +184,7 @@ export class PromptOptimizer {
                 rawResponse: '{"candidateA": {"prompt": "Optimized candidate A", "reasoning": "Mock reasoning A"}, "candidateB": {"prompt": "Optimized candidate B", "reasoning": "Mock reasoning B"}}'
             };
         }
-        const providers = ['anthropic', 'openai', 'openrouter'];
+        const providers = ['anthropic', 'openai', 'gemini', 'openrouter'];
         for (const provider of providers) {
             try {
                 if (provider === 'anthropic' && this.anthropic) {
@@ -204,6 +211,30 @@ export class PromptOptimizer {
                         response_format: { type: 'json_object' }
                     });
                     const content = response.choices[0]?.message?.content;
+                    if (!content) throw new Error('No content returned');
+                    const parsed = JSON.parse(content);
+                    return {
+                        candidates: [
+                            { prompt: parsed.candidateA.prompt, reasoning: parsed.candidateA.reasoning, score: 0 },
+                            { prompt: parsed.candidateB.prompt, reasoning: parsed.candidateB.reasoning, score: 0 }
+                        ],
+                        rawResponse: content
+                    };
+                } else if (provider === 'gemini' && this.gemini) {
+                    const systemPrompt = "You are a prompt optimizer. Output exclusively JSON. You suggest a candidateA and candidateB. You MUST format output as: {\"candidateA\": {\"prompt\": \"...\", \"reasoning\": \"...\"}, \"candidateB\": {\"prompt\": \"...\", \"reasoning\": \"...\"}}";
+
+                    const combinedMessages = messages.map(m => m.role + ': ' + m.content).join('\n');
+
+                    const response = await this.gemini.models.generateContent({
+                        model: 'gemini-2.5-pro',
+                        contents: combinedMessages,
+                        config: {
+                            systemInstruction: systemPrompt,
+                            responseMimeType: 'application/json'
+                        }
+                    });
+
+                    const content = response.text;
                     if (!content) throw new Error('No content returned');
                     const parsed = JSON.parse(content);
                     return {
