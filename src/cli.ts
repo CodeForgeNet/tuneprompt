@@ -10,6 +10,7 @@ import { historyCommand } from './commands/history';
 import { fixCommand } from './commands/fix';
 import { activateCommand } from './commands/activate';
 import { getLicenseInfo } from './utils/license';
+import { registerGenerateCommand } from './commands/generate';
 
 // Read version from package.json
 const packageJson = require('../package.json');
@@ -101,6 +102,8 @@ program
             console.log(chalk.gray(`Last Verified: ${new Date(license.lastVerified).toLocaleDateString()}\n`));
         }
     });
+
+registerGenerateCommand(program);
 
 // Watch mode implementation
 async function runWatchMode(options: any) {
