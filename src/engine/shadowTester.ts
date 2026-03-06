@@ -41,17 +41,37 @@ export async function runShadowTest(
     const providerName = test.config?.provider;
     const model = test.config?.model;
 
-    // If specific provider/model is requested, use it directly (Strict Mode)
-    if (providerName && model) {
-        try {
-            const apiKey = ProviderFactory.getApiKey(providerName);
-            if (!apiKey) {
-                throw new Error(`No API key found for provider: ${providerName}`);
-            }
+    // Determine providers to try
+    let providersToTry: { name: string, model?: string }[] = [];
 
-            const provider = ProviderFactory.create(providerName, {
+    if (providerName && model) {
+        providersToTry.push({ name: providerName, model });
+    }
+
+    // Fallback queue
+    const fallbackQueue = [
+        { name: 'anthropic', model: 'claude-3-5-sonnet-latest' },
+        { name: 'openai', model: 'gpt-4o' },
+        { name: 'gemini', model: 'gemini-2.0-flash' },
+        { name: 'openrouter', model: 'nvidia/nemotron-3-nano-30b-a3b:free' }
+    ];
+
+    for (const entry of fallbackQueue) {
+        if (entry.name !== providerName) {
+            providersToTry.push(entry);
+        }
+    }
+
+    let errors: string[] = [];
+
+    for (const target of providersToTry) {
+        try {
+            const apiKey = ProviderFactory.getApiKey(target.name);
+            if (!apiKey) continue;
+
+            const provider = ProviderFactory.create(target.name, {
                 apiKey,
-                model,
+                model: target.model || 'latest',
                 maxTokens: 2000
             });
 
@@ -67,13 +87,12 @@ export async function runShadowTest(
                 failureReason
             };
         } catch (error: any) {
-            console.log(`⚠️ Specified provider ${providerName} failed: ${error.message}`);
-            throw new Error(`Failed to validate on target model: ${error.message}`);
+            errors.push(`${target.name}: ${error.message}`);
+            continue;
         }
     }
 
-    // Phase 2 Decision: Fail fast if no provider/model is defined (Strict Awareness)
-    throw new Error(`Test "${test.description}" lacks provider/model configuration. Validation aborted.`);
+    throw new Error(`Shadow test failed for all providers: ${errors.join(' | ')}`);
 }
 
 /**

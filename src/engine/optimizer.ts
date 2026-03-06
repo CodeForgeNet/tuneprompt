@@ -156,7 +156,7 @@ export class PromptOptimizer {
                 // Pick a strong model for optimization if not defined
                 const model = providerName === 'anthropic' ? 'claude-3-5-sonnet-latest' :
                     providerName === 'openai' ? 'gpt-4o' :
-                        providerName === 'gemini' ? 'gemini-1.5-pro' : undefined;
+                        providerName === 'gemini' ? 'gemini-2.0-flash' : undefined;
 
                 if (!model) continue;
 

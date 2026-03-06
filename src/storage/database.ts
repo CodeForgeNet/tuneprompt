@@ -100,7 +100,7 @@ export class TestDatabase {
             insertResult.run(
                 result.id,
                 run.id,
-                result.testCase.description,
+                result.testCase.description || 'No description',
                 typeof result.testCase.prompt === 'string' ? result.testCase.prompt : JSON.stringify(result.testCase.prompt),
                 result.testCase.variables ? JSON.stringify(result.testCase.variables) : null,
                 typeof result.testCase.expect === 'string' ? result.testCase.expect : JSON.stringify(result.testCase.expect),

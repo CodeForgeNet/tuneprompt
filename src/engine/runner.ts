@@ -21,7 +21,7 @@ export class TestRunner {
 
     for (const name of providerNames) {
       const providerConfig = this.config.providers[name];
-      if (providerConfig) {
+      if (providerConfig && providerConfig.apiKey) {
         this.providers.set(name, ProviderFactory.create(name, providerConfig));
       }
     }
