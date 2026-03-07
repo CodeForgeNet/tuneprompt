@@ -25,13 +25,13 @@ module.exports = {
       temperature: 0.7
     }
   },
-
+  
   // Global semantic similarity threshold
   threshold: 0.8,
-
+  
   // Directory containing test files
   testDir: './tests',
-
+  
   // Output format: 'json', 'table', or 'both'
   outputFormat: 'table'
 };
