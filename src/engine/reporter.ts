@@ -3,7 +3,7 @@ import Table from 'cli-table3';
 import { TestRun, TestResult } from '../types';
 
 export class TestReporter {
-    printResults(run: TestRun, format: 'json' | 'table' | 'both' = 'both') {
+    printResults(run: TestRun, format: 'json' | 'table' | 'both' = 'table') {
         if (format === 'json' || format === 'both') {
             this.printJSON(run);
         }

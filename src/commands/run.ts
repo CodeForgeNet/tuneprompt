@@ -8,8 +8,6 @@ import { TestLoader } from '../engine/loader';
 import { TestRunner } from '../engine/runner';
 import { TestReporter } from '../engine/reporter';
 import { TestDatabase } from '../storage/database';
-import { LicenseManager, getLicenseInfo } from '../utils/license';
-import { TestResult } from '../types';
 
 export interface RunOptions {
   config?: string;
@@ -18,48 +16,18 @@ export interface RunOptions {
   cloud?: boolean;
 }
 
-// At the end of your test run reporter
-function displayRunSummary(results: TestResult[]): void {
-  const failed = results.filter(r => r.status === 'fail');
-  const passed = results.filter(r => r.status === 'pass');
 
-  console.log(chalk.bold.white('\n' + '='.repeat(60)));
-  console.log(chalk.bold.white('Test Summary'));
-  console.log(chalk.bold.white('='.repeat(60)));
-  console.log(chalk.green(`✓ Passed: ${passed.length}`));
-  console.log(chalk.red(`✗ Failed: ${failed.length}`));
-  console.log(chalk.gray(`Total: ${results.length}`));
-  console.log(chalk.bold.white('='.repeat(60) + '\n'));
-
-  // UPSELL MESSAGE (NEW)
-  if (failed.length > 0) {
-    console.log(chalk.yellow('⚠️  ' + failed.length + ' test(s) failed'));
-    console.log(chalk.gray('\nDon\'t waste time debugging manually.'));
-    console.log(chalk.cyan('Run ') + chalk.bold.white('tuneprompt fix') + chalk.cyan(' to let AI repair these prompts instantly.\n'));
-
-    // Check license status
-    const licenseManager = new LicenseManager();
-    licenseManager.hasFeature('fix').then((hasAccess: boolean) => {
-      if (!hasAccess) {
-        console.log(chalk.gray('Unlock fix with: ') + chalk.white('https://www.tuneprompt.xyz/pricing'));
-        console.log(chalk.gray('Already have a key? ') + chalk.white('tuneprompt activate <key>\n'));
-      }
-    });
-  }
-}
 
 // Extract the core run functionality to a separate function
 export async function runTests(options: RunOptions = {}) {
   const startTime = Date.now();
-  const spinner = ora('Loading configuration...').start();
+  const spinner = ora('Loading...').start();
 
   try {
-    // Load config
     const config = await loadConfig(options.config);
     spinner.succeed('Configuration loaded');
 
-    // Load tests
-    spinner.start('Loading test cases...');
+    spinner.start('Loading tests...');
     const loader = new TestLoader();
     const testCases = loader.loadTestDir(config.testDir || './tests');
 
@@ -68,23 +36,19 @@ export async function runTests(options: RunOptions = {}) {
       process.exit(1);
     }
 
-    spinner.succeed(`Loaded ${testCases.length} test case(s)`);
+    spinner.succeed(`Loaded ${testCases.length} test(s)`);
 
-    // Run tests
     spinner.start('Running tests...');
     const runner = new TestRunner(config);
     const results = await runner.runTests(testCases);
     spinner.stop();
 
-    // Save to database
-    // Save to database
     const db = new TestDatabase();
     db.saveRun(results);
 
-    // Calculate results for cloud upload (and for sync logic)
-    const currentRunId = results.id; // Assuming results has ID
+    // Calculate results for cloud upload
+    const currentRunId = results.id;
 
-    // Report results
     const reporter = new TestReporter();
     reporter.printResults(results, config.outputFormat);
 
@@ -123,16 +87,15 @@ export const runCommand = new Command('run')
 
 async function syncPendingRuns(db: TestDatabase, options: any) {
   const pendingRuns = db.getPendingUploads();
-
   if (pendingRuns.length === 0) return;
 
-  console.log(chalk.blue(`\n☁️  Syncing ${pendingRuns.length} pending run(s) to Cloud...`));
+  const syncSpinner = ora(`Syncing ${pendingRuns.length} run(s) to Cloud...`).start();
 
   const cloudService = new CloudService();
   await cloudService.init();
 
   if (!(await cloudService.isAuthenticated())) {
-    console.log(chalk.yellow('⚠️  Not authenticated. Run `tuneprompt activate` first.'));
+    syncSpinner.warn('Not authenticated. Run `tuneprompt activate` first.');
     return;
   }
 
@@ -147,7 +110,7 @@ async function syncPendingRuns(db: TestDatabase, options: any) {
       projectId = projects[0].id;
     }
   } catch (err) {
-    console.log(chalk.yellow('⚠️  Failed to get project info'));
+    syncSpinner.warn('Failed to get project info');
     return;
   }
 
@@ -202,9 +165,8 @@ async function syncPendingRuns(db: TestDatabase, options: any) {
 
     if (uploadResult.success) {
       db.markAsUploaded(run.id);
-      console.log(chalk.green(`  ✓ Uploaded run from ${run.timestamp.toLocaleTimeString()}`));
-    } else {
-      console.log(chalk.red(`  ✗ Failed to upload run ${run.id}: ${uploadResult.error}`));
     }
   }
+
+  syncSpinner.succeed(`Synced ${pendingRuns.length} run(s) to Cloud`);
 }

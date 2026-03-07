@@ -67,7 +67,10 @@ export async function runShadowTest(
     for (const target of providersToTry) {
         try {
             const apiKey = ProviderFactory.getApiKey(target.name);
-            if (!apiKey) continue;
+            if (!apiKey) {
+                errors.push(`${target.name}: no API key (set ${target.name.toUpperCase()}_API_KEY)`);
+                continue;
+            }
 
             const provider = ProviderFactory.create(target.name, {
                 apiKey,

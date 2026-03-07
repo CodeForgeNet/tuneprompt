@@ -1,4 +1,6 @@
 import { FailedTest, OptimizationResult, FixCandidate } from '../types/fix';
+import ora from 'ora';
+import chalk from 'chalk';
 import {
     generateOptimizationPrompt,
     generateJSONFixPrompt,
@@ -21,11 +23,8 @@ export class PromptOptimizer {
      * Main optimization method with Anti-Regression and Iterative Refinement
      */
     async optimize(failedTest: FailedTest, suite: FailedTest[]): Promise<OptimizationResult> {
-        console.log(`\n🧠 Analyzing failure: "${failedTest.description}"`);
-        console.log(`📈 Full test suite size: ${suite.length}`);
-
+        const spinner = ora(`Analyzing failure: "${failedTest.description}"`).start();
         const initialAggregateScore = suite.reduce((sum, t) => sum + t.score, 0) / suite.length;
-        console.log(`📊 Current aggregate score: ${initialAggregateScore.toFixed(2)}`);
 
         const errorContext = generateErrorContext(failedTest);
         const passingExamples = suite
@@ -41,7 +40,7 @@ export class PromptOptimizer {
 
         while (iterations < this.maxIterations) {
             iterations++;
-            console.log(`🚀 Optimization Attempt #${iterations}...`);
+            spinner.text = `Optimization Attempt #${iterations}/${this.maxIterations}...`;
 
             if (iterations === 1) {
                 const input: MetaPromptInput = {
@@ -67,21 +66,19 @@ export class PromptOptimizer {
 
             for (const candidate of candidates) {
                 try {
-                    console.log(`🧪 Testing candidate...`);
+                    spinner.text = `Attempt #${iterations}: Testing candidate...`;
 
                     const primaryResult = await runShadowTest(candidate.prompt, failedTest);
 
                     if (primaryResult.score < failedTest.threshold) {
-                        console.log(`   ❌ Candidate failed to resolve primary error (score: ${primaryResult.score.toFixed(2)})`);
-                        const specificReason = primaryResult.failureReason || `the output was: "${primaryResult.output.substring(0, 100)}..."`;
-                        lastFailureReason = `Candidate failed. Reason: ${specificReason}. Previous reasoning: ${candidate.reasoning}`;
+                        const specificReason = primaryResult.failureReason || `the output was: "${primaryResult.output.substring(0, 50)}..."`;
+                        lastFailureReason = `Candidate failed. Reason: ${specificReason}.`;
                         continue;
                     }
 
-                    console.log(`   ✅ Resolved primary error. Running anti-regression...`);
+                    spinner.text = `Attempt #${iterations}: Verifying anti-regression...`;
 
                     const suiteResult = await runSuiteShadowTest(candidate.prompt, suite);
-                    console.log(`   📊 Suite aggregate score: ${suiteResult.aggregateScore.toFixed(2)}`);
 
                     if (suiteResult.aggregateScore > bestAggregateScore) {
                         bestAggregateScore = suiteResult.aggregateScore;
@@ -99,24 +96,25 @@ export class PromptOptimizer {
                             iterations
                         };
                     } else if (suiteResult.aggregateScore <= bestAggregateScore) {
-                        console.log(`   📉 Candidate regression: aggregate score dropped (Current: ${bestAggregateScore.toFixed(2)} VS New: ${suiteResult.aggregateScore.toFixed(2)})`);
                         const regressions = suiteResult.results.filter(r => !r.passed).map(r => r.failureReason).filter(Boolean);
                         const regressionText = regressions.length > 0 ? ` Required features broke: ${regressions.slice(0, 2).join('; ')}.` : '';
-                        lastFailureReason = `The fix resolved the failure but introduced regressions in other cases.${regressionText} Maintain all successful patterns while fixing the failure.`;
+                        lastFailureReason = `Fix introduced regressions.${regressionText}`;
                     }
                 } catch (error: any) {
-                    console.error(`   ⚠️ Validation error for candidate: ${error.message}`);
+                    spinner.text = `Attempt #${iterations}: ⚠️ ${error.message?.substring(0, 80)}`;
+                    lastFailureReason = error.message;
                 }
             }
 
             if (bestResult) break;
-            console.log(`♻️ No candidate was net-positive. Retrying with refinement feedback...`);
         }
 
         if (!bestResult) {
-            throw new Error(`All fix attempts failed to resolve the regression or improve the aggregate score after ${this.maxIterations} iterations.`);
+            spinner.fail(`Optimization failed`);
+            throw new Error(`Failed to improve score after ${this.maxIterations} attempts. ${lastFailureReason || ''}`);
         }
 
+        spinner.succeed(`Optimization successful!`);
         return bestResult;
     }
 

@@ -12,9 +12,8 @@ import { handleError, Errors } from '../utils/errorHandler';
 
 export async function fixCommand(options: { yes?: boolean } = {}) {
     try {
-        console.log(chalk.bold.cyan('\n🔧 TunePrompt Fix\n'));
+        console.log('');
 
-        // License check with better error
         const spinner = ora('Checking license...').start();
         const licenseValid = await checkLicense();
 
@@ -26,39 +25,32 @@ export async function fixCommand(options: { yes?: boolean } = {}) {
 
         spinner.succeed('License validated');
 
-        // Load failed tests with error handling
         const failedTests = await getFailedTests();
 
         if (failedTests.length === 0) {
             throw Errors.NO_FAILED_TESTS;
         }
 
-        console.log(chalk.yellow(`\nFound ${failedTests.length} failed test(s):\n`));
+        console.log(chalk.yellow(`\n${failedTests.length} failed test(s):`));
 
         failedTests.forEach((test: FailedTest, index: number) => {
-            const modelInfo = test.config?.model ? ` [Target: ${test.config.provider || 'unknown'}/${test.config.model}]` : '';
-            console.log(`${index + 1}. ${chalk.bold(test.description)}${chalk.cyan(modelInfo)}`);
-            console.log(`   Score: ${chalk.red(test.score.toFixed(2))} (threshold: ${test.threshold})`);
+            console.log(chalk.gray(`  ${index + 1}. ${test.description} — score: ${chalk.red(test.score.toFixed(2))} / ${test.threshold}`));
         });
 
         // Step 3: Ask which tests to fix
         let selectedIndexes: number[] = [];
         if (options.yes) {
             selectedIndexes = failedTests.map((_, i) => i);
-            console.log(chalk.gray(`\nNon-interactive mode: Automatic selection of all ${failedTests.length} tests.`));
         } else {
             const response = await inquirer.prompt([{
                 type: 'checkbox',
                 name: 'selectedIndexes',
                 message: 'Which tests would you like to fix?',
-                choices: failedTests.map((test: FailedTest, index: number) => {
-                    const modelInfo = test.config?.model ? ` [${test.config.provider || 'unknown'}/${test.config.model}]` : '';
-                    return {
-                        name: `${test.description} (score: ${test.score.toFixed(2)})${modelInfo}`,
-                        value: index,
-                        checked: true
-                    };
-                })
+                choices: failedTests.map((test: FailedTest, index: number) => ({
+                    name: `${test.description} (${test.score.toFixed(2)})`,
+                    value: index,
+                    checked: true
+                }))
             }]);
             selectedIndexes = response.selectedIndexes;
         }
@@ -78,8 +70,8 @@ export async function fixCommand(options: { yes?: boolean } = {}) {
             const test = failedTests[index];
             const suite = await getSuiteTests(test.id);
 
-            const modelInfo = test.config?.model ? ` (Target: ${test.config.model})` : '';
-            console.log(chalk.bold(`\n\n━━━ Fixing: ${test.description}${modelInfo} ━━━\n`));
+            const modelInfo = test.config?.model ? ` (${test.config.model})` : '';
+            console.log(chalk.bold(`\n━━━ ${test.description}${modelInfo} ━━━\n`));
 
             try {
                 const result = await optimizer.optimize(test, suite);
@@ -104,8 +96,7 @@ export async function fixCommand(options: { yes?: boolean } = {}) {
 
                 if (action === 'apply') {
                     await applyFix(test, result.optimizedPrompt);
-                    console.log(`\n${chalk.bgGreen.black(' DONE ')} ${chalk.green('Prompt updated in:')} ${chalk.bold(test.id)}`);
-                    console.log(chalk.gray('The next run will use this new prompt.\n'));
+                    console.log(chalk.green(`  ✓ Updated: ${test.id}`));
                 } else if (action === 'edit') {
                     console.log(chalk.gray('\nOpening editor... (Save and close to apply)\n'));
                     const { edited } = await inquirer.prompt([{
@@ -126,8 +117,7 @@ export async function fixCommand(options: { yes?: boolean } = {}) {
             }
         }
 
-        console.log(chalk.bold.green('\n\n✨ Fix session complete!\n'));
-        console.log(chalk.gray('Run `tuneprompt run` to verify your fixes.\n'));
+        console.log(chalk.bold.green('\n✨ Done. Run `tuneprompt run` to verify.\n'));
 
         // After fix completes
         const license = getLicenseInfo();
@@ -145,20 +135,9 @@ export async function fixCommand(options: { yes?: boolean } = {}) {
 }
 
 function showUpgradePrompt() {
-    console.log(chalk.yellow('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
-    console.log(chalk.bold('🔒 Premium Feature: Auto-Fix Engine\n'));
-    console.log('The ' + chalk.cyan('fix') + ' command uses advanced AI to automatically');
-    console.log('repair your failing prompts.\n');
-    console.log(chalk.bold('What you get:'));
-    console.log('  ✅ AI-powered prompt optimization');
-    console.log('  ✅ Shadow testing before applying fixes');
-    console.log('  ✅ Interactive diff viewer');
-    console.log('  ✅ Unlimited fix attempts\n');
-
-    console.log(chalk.bold('Get Premium:'));
-    console.log(`  1. Buy a license: ${chalk.blue.underline('https://www.tuneprompt.xyz/pricing')}`);
-    console.log(`  2. Activate: ${chalk.gray('tuneprompt activate <your-key>')}\n`);
-    console.log(chalk.yellow('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'));
+    console.log(chalk.yellow('\n🔒 Premium feature. Get access:'));
+    console.log(chalk.gray(`   ${chalk.blue.underline('https://www.tuneprompt.xyz/pricing')}`));
+    console.log(chalk.gray(`   Then: ${chalk.white('tuneprompt activate <key>')}\n`));
 }
 
 async function showDiff(original: string, optimized: string, reasoning: string) {

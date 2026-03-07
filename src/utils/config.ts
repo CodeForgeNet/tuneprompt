@@ -39,7 +39,7 @@ function validateConfig(config: any): TunePromptConfig {
   return {
     threshold: config.threshold || 0.8,
     testDir: config.testDir || './tests',
-    outputFormat: config.outputFormat || 'both',
+    outputFormat: config.outputFormat || 'table',
     ...config
   };
 }
@@ -80,7 +80,7 @@ export function getDefaultConfigTemplate(): string {
   testDir: './tests',
   
   // Output format: 'json', 'table', or 'both'
-  outputFormat: 'both'
+  outputFormat: 'table'
 };
 `;
 }
